@@ -2,6 +2,8 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QStringList>
+#include <vector>
 
 namespace Ui {
 class MainWindow;
@@ -20,6 +22,7 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
+    void readcsv(QStringList &list, QStringList & tooltip, std::vector<unsigned int> &index);
 };
 
 #endif // MAINWINDOW_H
