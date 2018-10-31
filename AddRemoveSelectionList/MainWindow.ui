@@ -82,7 +82,7 @@
   <customwidget>
    <class>Gui::Util::AddRemoveSelection</class>
    <extends>QWidget</extends>
-   <header>Gui/Util/AddRemoveSelection.h</header>
+   <header>AddRemoveSelection.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
