@@ -1,3 +1,10 @@
+//*************************************************************************************************
+//                Revision Record
+//  Date         Issue      Author               Description
+// ----------  ---------  ---------------  --------------------------------------------------------
+// 10/30/2018      -       Yung-Yeh Chang   Original Release
+// 10/31/2018      -       Yung-Yeh Chang   Better view experience when doing add/remove/reset
+//*************************************************************************************************
 #include "AddRemoveSelection.h"
 #include "ui_AddRemoveSelection.h"
 #include <algorithm>
@@ -7,6 +14,8 @@
 #include <QFileDialog>
 #include <QSizePolicy>
 #include <QRegularExpression>
+#include <QPoint>
+#include <QDebug>
 
 namespace Gui
 {
@@ -29,6 +38,7 @@ AddRemoveSelection::AddRemoveSelection(QWidget *parent) :
     ui->_availableListView->setModel(&_availableItemModel);
     ui->_availableListView->setEditTriggers(QAbstractItemView::NoEditTriggers);
     ui->_availableListView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    ui->_availableListView->setAutoScroll(false);
     // Selected list view
     ui->_selectedListView->setModel(&_selectedItemModel);
     ui->_selectedListView->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
@@ -37,6 +47,7 @@ AddRemoveSelection::AddRemoveSelection(QWidget *parent) :
     ui->_selectedListView->setDragDropMode(QAbstractItemView::DragDrop);
     ui->_selectedListView->setDefaultDropAction(Qt::MoveAction);
     ui->_selectedListView->setMovement(QListView::Snap);
+    ui->_selectedListView->setAutoScroll(false);
     ui->_messageLabel->setHidden(true);
     // Renaming a signal
     connect(&_selectedItemModel, SIGNAL(itemChanged(QStandardItem*)), this, SLOT(itemChangeCheck(QStandardItem*)));
@@ -48,7 +59,7 @@ AddRemoveSelection::AddRemoveSelection(QWidget *parent) :
     connect(&_selectedItemModel,SIGNAL(rowsInserted(QModelIndex,int,int)),this,SLOT(whenRowsInserted(const QModelIndex, int, int)));
     connect(&_selectedItemModel,SIGNAL(rowsRemoved(QModelIndex,int,int)),this,SLOT(whenRowsRemoved(QModelIndex,int,int)));
     // Drop event signal
-    ui->_selectedListView->viewport()->installEventFilter(this);
+    ui->_selectedListView->viewport()->installEventFilter(this);    
 }
 
 AddRemoveSelection::~AddRemoveSelection()
@@ -214,6 +225,7 @@ void AddRemoveSelection::on__reset_clicked() {
         _selectedItemModel.clear();
         populateAvailableList();
         ui->_messageLabel->setHidden(true);
+        ui->_availableListView->scrollToTop();
     }
 }
 
@@ -421,6 +433,8 @@ void AddRemoveSelection::removeItems(const QModelIndexList &selections) {
     else {
         ui->_messageLabel->setHidden(true);
     }
+    ui->_availableListView->selectionModel()->select(ui->_availableListView->indexAt(
+                        ui->_availableListView->viewport()->pos()),QItemSelectionModel::Select);
 }
 
 int AddRemoveSelection::findNextRowInAvailableList(int rowNum, std::vector<unsigned int> tempIndex) {
