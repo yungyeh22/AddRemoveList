@@ -10,7 +10,7 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 QMAKE_CXXFLAGS += -std=c++11
 CONFIG += c++11
-
+CONFIG -= debug_and_release
 TARGET = AddRemoveSelectionWidget
 TEMPLATE = app
 
