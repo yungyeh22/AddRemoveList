@@ -10,17 +10,17 @@ What I learned from this project are
  - Use QModelIndex
  - Return item from selected view and back to its original order
 
-
+![](https://lh3.googleusercontent.com/VutLxXbhxTaa5abZlzm8TJ9R8bLFyXwvjaVcfV3_XNEdXGgiVuKfQ3xr0bzL_4vkhbaZjF4l95Br-ee_T5RfIYFsuRw4b2XN0VIlzW9OwzoiyPSDuUjkA5ZLSh3N1n-GdNzL6rzFQPc=w600-h473-no)
 ## Here is my idea of handling drag/drop reorder action.
 
 1. In the constructor
 ```C++
 // Enable drag/drop
-ui->_liistView->setSelectionMode(QAbstractItemView::ExtendedSelection);
-ui->_liistView->setDragDropOverwriteMode(false);
-ui->_liistView->setDragDropMode(QAbstractItemView::DragDrop);
-ui->_liistView->setDefaultDropAction(Qt::MoveAction);
-ui->_liistView->setMovement(QListView::Snap);
+ui->_listView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+ui->_listView->setDragDropOverwriteMode(false);
+ui->_listView->setDragDropMode(QAbstractItemView::DragDrop);
+ui->_listView->setDefaultDropAction(Qt::MoveAction);
+ui->_listView->setMovement(QListView::Snap);
 // Install a event filter to the QListView::viewport()
 ui->_listView->viewport()->installEventFilter(this);
 ```
