@@ -254,7 +254,7 @@ void AddRemoveSelection::on__saveListButton_clicked() {
         QString setFilter = "Comma-Separated Values File (*.csv)";
         QString filter = setFilter + ";; All files (*.*)";
         QFileDialog saveDlg(this);
-        saveDlg.selectFile("signals_list.csv");
+        saveDlg.selectFile("item_list.csv");
         saveDlg.setNameFilter(filter);
         saveDlg.selectNameFilter(setFilter);
         saveDlg.setAcceptMode(QFileDialog::AcceptSave);
@@ -384,9 +384,9 @@ void AddRemoveSelection::addItems(const QModelIndexList &selections) {
             makeUnderscoreVar(varName);
         }
         selectedItem->setText(varName);
-        _selectedItemModel.insertRow(rowCount, selectedItem);
-        backSortedIndex.push_back(_fullList.indexOf(
-            QRegularExpression(idx.data().toString()))); // Save _fullList index that moved
+        _selectedItemModel.insertRow(rowCount, selectedItem);        
+        QString escData = QRegularExpression::escape(idx.data().toString());
+        backSortedIndex.push_back(_fullList.indexOf(QRegularExpression(escData))); // Save _fullList index that moved
         _availableItemModel.removeRow(idx.row()); // Remove from the highest order
     }
     // Put elements in the right list in the correct order
@@ -472,7 +472,7 @@ int AddRemoveSelection::findNextRowInAvailableList(int rowNum, std::vector<unsig
         if (nextRowNum == rowNum) {
             rowNum = _availableItemModel.rowCount();
         }
-        // Otherwise, look for the next available location in the left listview based on teh previous search
+        // Otherwise, look for the next available location in the left listview based on previous search
         // result, use the result to insert the item.
         else {
             QList<QStandardItem*> foundItems = _availableItemModel.findItems(_fullList.at(nextRowNum));
