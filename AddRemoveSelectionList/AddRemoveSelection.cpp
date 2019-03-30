@@ -38,7 +38,7 @@ AddRemoveSelection::AddRemoveSelection(QWidget *parent) :
     ui->_availableListView->setModel(&_availableItemModel);
     ui->_availableListView->setEditTriggers(QAbstractItemView::NoEditTriggers);
     ui->_availableListView->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    ui->_availableListView->setAutoScroll(false);
+    ui->_availableListView->setAutoScroll(true);
     // Selected list view
     ui->_selectedListView->setModel(&_selectedItemModel);
     ui->_selectedListView->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
@@ -47,7 +47,7 @@ AddRemoveSelection::AddRemoveSelection(QWidget *parent) :
     ui->_selectedListView->setDragDropMode(QAbstractItemView::DragDrop);
     ui->_selectedListView->setDefaultDropAction(Qt::MoveAction);
     ui->_selectedListView->setMovement(QListView::Snap);
-    ui->_selectedListView->setAutoScroll(false);
+    ui->_selectedListView->setAutoScroll(true);
     ui->_messageLabel->setHidden(true);
     // Renaming a signal
     connect(&_selectedItemModel, SIGNAL(itemChanged(QStandardItem*)), this, SLOT(itemChangeCheck(QStandardItem*)));
@@ -215,7 +215,9 @@ void AddRemoveSelection::on__addItemButton_clicked() {
 
 void AddRemoveSelection::on__removeItemButton_clicked() {
     if (ui->_selectedListView->selectionModel()->hasSelection()) {
+        ui->_selectedListView->setAutoScroll(false);
         removeItems(ui->_selectedListView->selectionModel()->selectedIndexes());
+        ui->_selectedListView->setAutoScroll(true);
     }
 }
 
@@ -368,6 +370,7 @@ void AddRemoveSelection::populateAvailableList() {
 }
 
 void AddRemoveSelection::addItems(const QModelIndexList &selections) {
+    ui->_availableListView->setAutoScroll(false);
     QModelIndexList leftSelections = selections;
     // Get the order of index sorted so it can be removed from the left list correctly.
     // Unfortunately, std::greater<QModelIndex> doesn't work in this case. Using a lambda function instead;
@@ -401,6 +404,7 @@ void AddRemoveSelection::addItems(const QModelIndexList &selections) {
     else {
         ui->_messageLabel->setHidden(true);
     }
+    ui->_availableListView->setAutoScroll(true);
 }
 
 void AddRemoveSelection::removeItems(const QModelIndexList &selections) {
