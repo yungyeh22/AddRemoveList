@@ -16,7 +16,7 @@
   <widget class="QWidget" name="centralWidget">
    <layout class="QVBoxLayout" name="verticalLayout" stretch="15,0">
     <item>
-     <widget class="Gui::Util::AddRemoveSelection" name="_addRemoveWidget" native="true"/>
+     <widget class="Widgets::AddRemoveSelection" name="_addRemoveWidget" native="true"/>
     </item>
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout">
@@ -63,7 +63,7 @@
      <x>0</x>
      <y>0</y>
      <width>640</width>
-     <height>21</height>
+     <height>22</height>
     </rect>
    </property>
   </widget>
@@ -80,9 +80,9 @@
  <layoutdefault spacing="6" margin="11"/>
  <customwidgets>
   <customwidget>
-   <class>Gui::Util::AddRemoveSelection</class>
+   <class>Widgets::AddRemoveSelection</class>
    <extends>QWidget</extends>
-   <header>AddRemoveSelection.h</header>
+   <header location="global">Widgets/AddRemoveSelection.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

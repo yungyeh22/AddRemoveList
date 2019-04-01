@@ -27,11 +27,13 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 
 SOURCES += main.cpp\
-        MainWindow.cpp \
-        AddRemoveSelection.cpp
+        MainWindow.cpp \        
+    Widgets/AddRemoveSelection.cpp \
+    Util/ListCsvProcessor.cpp
 
-HEADERS  += MainWindow.h \
-        AddRemoveSelection.h
+HEADERS  += MainWindow.h \        
+    Widgets/AddRemoveSelection.h \
+    Util/ListCsvProcessor.h
 
-FORMS    += MainWindow.ui \
-        AddRemoveSelection.ui
+FORMS    += MainWindow.ui \        
+    Widgets/AddRemoveSelection.ui

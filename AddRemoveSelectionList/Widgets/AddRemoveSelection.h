@@ -3,6 +3,7 @@
 //  Date         Issue      Author               Description
 // ----------  ---------  ---------------  --------------------------------------------------------
 // 10/30/2018      -       Yung-Yeh Chang   Original Release
+// 03/30/2019      -       Yung-Yeh Chang   Fixed auto scroll issue and a crash due to special characters
 //*************************************************************************************************
 #ifndef ADDREMOVESELECTION_H
 #define ADDREMOVESELECTION_H
@@ -18,10 +19,9 @@ namespace Ui {
 class AddRemoveSelection;
 }
 
-namespace Gui
+namespace Widgets
 {
-namespace Util
-{
+
 
 /*
  * AddRemoveSelection class uses add/remove selection lists with left and right panel
@@ -42,9 +42,8 @@ class AddRemoveSelection : public QWidget
     Q_OBJECT
 
 public:
-    explicit AddRemoveSelection(QWidget *parent = 0);
-    ~AddRemoveSelection();
-
+    explicit AddRemoveSelection(QWidget *parent = nullptr);
+    ~AddRemoveSelection() override;
     // Set full/short checkbox state
     void setFullListCheckbox (bool checked);
 
@@ -71,10 +70,10 @@ public:
     void readListFromFile(const QString &filename);
 
     // Return a list of items that were selected
-    QStringList getSelectedItemList(bool raw = true);
+    QStringList getSelectedItemsList(bool raw = true);
 
     // Return the number of selected items
-    unsigned int getSelectedItemCount () const { return _selectedListIndex.size(); }
+    unsigned int getSelectedItemCount () const { return unsigned(_selectedListIndex.size()); }
 
     // Return the list of tooptips.
     QStringList toolTips() { return _tooltipList ; }
@@ -113,17 +112,20 @@ private:
     // Remove items from the right listview. Put back to left listview
     void removeItems(const QModelIndexList &selections);
 
-    // Read selected signal lists from a CSV file
-    void readSelectedSignalsListsFromFile(const QString &filename, QStringList &sList_raw, QStringList &sList_alias);
+    // Set the selected items to be Pre-populated in the selected view
+    void loadSelectedItemsFromLists(const QStringList &sList_raw, const QStringList &sList_alias);
 
-    // Set the signals to be Pre-loaded in the selected view
-    void loadSelectedSignalsFromLists(const QStringList &sList_raw, const QStringList &sList_alias);
+    // Read selected items from a CSV file
+    void readSelectedItemsListFromFile(const QString &filename, QStringList &sList_raw, QStringList &sList_alias);
+
+    // Save the selected items to a file file so we can load it again
+    void saveSelectedItemsListToFile(const QString &filename);
 
     // Return a reduced stringlist based on index
     QStringList reducedListByIndex(const QStringList &fList, const std::vector<unsigned int> index);
 
     // A helper function looks for the appropriate position when remove an item from selected list
-    int findNextRowInAvailableList(int rowNum, std::vector<unsigned int> tempIndex);
+    unsigned int findNextRowInAvailableList(unsigned int rowNum, std::vector<unsigned int> tempIndex);
 
     // A helper function for replacing special characters with underscores
     void makeUnderscoreVar(QString &str);
@@ -155,7 +157,6 @@ protected:
 
 };
 
-}
 }
 
 #endif // ADDREMOVESELECTION_H
