@@ -36,8 +36,12 @@ AddRemoveSelection::AddRemoveSelection(QWidget *parent) :
     ui->_fullListCheckBox->setChecked(true);
     // Available list view
     ui->_availableListView->setModel(&_availableItemModel);
-    ui->_availableListView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    ui->_availableListView->setEditTriggers(QAbstractItemView::NoEditTriggers); // Disable edit once for all. Otherwise, set the item flag for each item.
     ui->_availableListView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    ui->_availableListView->setDragDropMode(QAbstractItemView::DragDrop);
+    ui->_availableListView->setDefaultDropAction(Qt::MoveAction);
+    ui->_availableListView->setDragDropOverwriteMode(false);
+    ui->_availableListView->setMovement(QListView::Snap);
     ui->_availableListView->setAutoScroll(true);
     // Selected list view
     ui->_selectedListView->setModel(&_selectedItemModel);
@@ -513,6 +517,23 @@ QString AddRemoveSelection::duplicateNameHandler(const QString &str) {
     return newStr;
 }
 
+AddRemoveSelection::ActionId AddRemoveSelection::currentDragDropAction() {
+    ActionId aId;
+    if (_itemsSelectedInAvailableView & _itemsDropInSelectedView) {
+        aId = ActionId::AddItems;
+    }
+    else if (_itemsSelectedInSelectedView & _itemsDropInAvailableView) {
+        aId = ActionId::RemoveItems;
+    }
+    else if (_itemsSelectedInSelectedView & _itemsDropInSelectedView) {
+        aId = ActionId::ReorderItems;
+    }
+    else {
+        aId = ActionId::NoAction;
+    }
+    return aId;
+}
+
 void AddRemoveSelection::messageBox(const QString &title, QMessageBox::Icon icon) {
     QMessageBox msgBox;
     msgBox.setText(title);
@@ -523,12 +544,28 @@ void AddRemoveSelection::messageBox(const QString &title, QMessageBox::Icon icon
 }
 
 /*
- * The event filter is installed to QListView::viewport for identifying
- * the dropEvent().
+ * The event filter is installed to QListView::viewport for identifying events.
 */
 bool AddRemoveSelection::eventFilter(QObject *object, QEvent *event) {
-    if (object == ui->_selectedListView->viewport() && event->type() == QEvent::Drop) {
-        _itemFromMove = true;
+    /* Use for tracking events */
+//        qDebug() << object->objectName();
+//        qDebug() << object->parent()->objectName();
+//        qDebug() << event->type();
+    if (object == ui->_availableListView->viewport() && event->type() == QEvent::Drop) {
+        _itemsDropInAvailableView = true;
+        _itemsDropInSelectedView = false;
+    }
+    else if (object == ui->_selectedListView->viewport() && event->type() == QEvent::Drop) {
+        _itemsDropInAvailableView = false;
+        _itemsDropInSelectedView = true;
+    }
+    else if (object == ui->_availableListView->viewport() && event->type() == QEvent::MouseButtonPress) {
+        _itemsSelectedInAvailableView = true;
+        _itemsSelectedInSelectedView = false;
+    }
+    else if (object == ui->_selectedListView->viewport() && event->type() == QEvent::MouseButtonPress) {
+        _itemsSelectedInAvailableView = false;
+        _itemsSelectedInSelectedView = true;
     }
     return QObject::eventFilter(object, event);
 }
@@ -558,7 +595,7 @@ bool AddRemoveSelection::eventFilter(QObject *object, QEvent *event) {
 */
 void AddRemoveSelection::onRowsInserted(const QModelIndex &parent, int first, int last) {
     (void)parent;
-    if (_itemFromMove) {
+    if (currentDragDropAction()==ActionId::ReorderItems) {
         _numOfMovedItem = unsigned(last - first +1);
         std::vector<unsigned int> itemIndexToBeInsert;
         for (const QModelIndex &index : ui->_selectedListView->selectionModel()->selectedIndexes()) {
@@ -585,7 +622,7 @@ void AddRemoveSelection::onRowsInserted(const QModelIndex &parent, int first, in
 */
 void AddRemoveSelection::onRowsRemoved(const QModelIndex &parent, int first, int last) {
     (void)parent;
-    if (_itemFromMove) {        
+    if (currentDragDropAction()==ActionId::ReorderItems) {
         if (_numOfMovedItem > 0) {
             if (first == last) {
                 _selectedListIndex.erase(_selectedListIndex.begin()+first);
@@ -596,12 +633,16 @@ void AddRemoveSelection::onRowsRemoved(const QModelIndex &parent, int first, int
             _numOfMovedItem-=unsigned(last-first+1);
         }
         // Complete reorder
-        if (_numOfMovedItem == 0) {
-          _itemFromMove = false;
+        if (_numOfMovedItem == 0) {          
           _itemIndexToBeRemoved.clear();
           _numOfMovedItem = 0;
         }
     }
+}
+
+void AddRemoveSelection::onSelectedViewEditEnd(QWidget *, QAbstractItemDelegate::EndEditHint) {
+    QStandardItem * item = _selectedItemModel.itemFromIndex(ui->_selectedListView->currentIndex());
+    checkItemNameError(item);
 }
 
 }

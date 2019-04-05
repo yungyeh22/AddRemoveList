@@ -40,6 +40,7 @@ namespace Widgets
 class AddRemoveSelection : public QWidget
 {
     Q_OBJECT
+    enum ActionId {AddItems,RemoveItems,ReorderItems,NoAction};
 
 public:
     explicit AddRemoveSelection(QWidget *parent = nullptr);
@@ -136,6 +137,9 @@ private:
     // A helper function to handle duplicate item name
     QString duplicateNameHandler(const QString &str);
 
+    // Itme drop & drop action identifier
+    ActionId currentDragDropAction();
+
     // Display warning message
     void messageBox(const QString &title, QMessageBox::Icon icon = QMessageBox::Warning);    
 
@@ -148,16 +152,16 @@ private: // Vars
     std::vector<unsigned int> _selectedListIndex;
     std::vector<unsigned int> _shortListIndex;
     bool _validNameCheck = false;
-    // Variables helps on rename an item
-    bool _renameEvent = false;
-    // Variables helps on remorder the list
-    bool _itemFromMove = false;
+    // Variables helps on determine current action
+    bool _itemsDropInSelectedView = false;
+    bool _itemsDropInAvailableView = false;
+    bool _itemsSelectedInAvailableView = false;
+    bool _itemsSelectedInSelectedView = false;
     unsigned int _numOfMovedItem;
     std::vector<unsigned int> _itemIndexToBeRemoved;
 
 protected:
     bool eventFilter(QObject *object, QEvent *event) override;
-
 };
 
 }
