@@ -48,18 +48,20 @@ AddRemoveSelection::AddRemoveSelection(QWidget *parent) :
     ui->_selectedListView->setDefaultDropAction(Qt::MoveAction);
     ui->_selectedListView->setMovement(QListView::Snap);
     ui->_selectedListView->setAutoScroll(true);
-    ui->_messageLabel->setHidden(true);
-    // Renaming a signal
-    connect(&_selectedItemModel, SIGNAL(itemChanged(QStandardItem*)), this, SLOT(itemChangeCheck(QStandardItem*)));
+    ui->_messageLabel->setHidden(true);    
+
     // Signals for Reordering
     /*
      * The strategy here is using the dropEvent from the QListView, and then connect to the inserted/removed signals
      * for managing the _selectedListIndex.
     */
-    connect(&_selectedItemModel,SIGNAL(rowsInserted(QModelIndex,int,int)),this,SLOT(whenRowsInserted(const QModelIndex, int, int)));
-    connect(&_selectedItemModel,SIGNAL(rowsRemoved(QModelIndex,int,int)),this,SLOT(whenRowsRemoved(QModelIndex,int,int)));
-    // Drop event signal
-    ui->_selectedListView->viewport()->installEventFilter(this);    
+    connect(&_selectedItemModel,&QStandardItemModel::rowsInserted,this,&AddRemoveSelection::onRowsInserted);
+    connect(&_selectedItemModel,&QStandardItemModel::rowsRemoved,this,&AddRemoveSelection::onRowsRemoved);
+    // Check drap / drop event signals without reimplementing the event functions
+    ui->_selectedListView->viewport()->installEventFilter(this);
+    ui->_availableListView->viewport()->installEventFilter(this);
+    // Check edit finish signal for renaming event
+    connect(ui->_selectedListView->itemDelegate(), &QAbstractItemDelegate::closeEditor, this, &AddRemoveSelection::onSelectedViewEditEnd);
 }
 
 AddRemoveSelection::~AddRemoveSelection()
@@ -152,7 +154,7 @@ void AddRemoveSelection::loadSelectedItemsFromLists(const QStringList &sList_raw
             _selectedListIndex.push_back(unsigned(nIndex));
             // Add items
             QStandardItem* selectedItem = new QStandardItem();
-            selectedItem->setFlags(selectedItem->flags() ^ (Qt::ItemIsDropEnabled));
+            selectedItem->setDropEnabled(false);
             selectedItem->setToolTip(sList_raw.at(idx));
             QString varName = sList_alias.at(idx);
             if (_validNameCheck) {
@@ -217,14 +219,12 @@ void AddRemoveSelection::on__removeItemButton_clicked() {
     }
 }
 
-void AddRemoveSelection::on__reset_clicked() {
-    if (!_selectedListIndex.empty()) {
-        _selectedListIndex.clear();
-        _selectedItemModel.clear();
-        populateAvailableList();
-        ui->_messageLabel->setHidden(true);
-        ui->_availableListView->scrollToTop();
-    }
+void AddRemoveSelection::on__reset_clicked() {    
+    _selectedListIndex.clear();
+    _selectedItemModel.clear();
+    populateAvailableList();
+    ui->_messageLabel->setHidden(true);
+    ui->_availableListView->scrollToTop();
 }
 
 void AddRemoveSelection::on__availableListView_doubleClicked(const QModelIndex &index) {
@@ -264,7 +264,6 @@ void AddRemoveSelection::on__saveListButton_clicked() {
             }
         }
     }
-
 }
 
 bool AddRemoveSelection::isFullList() {
@@ -339,11 +338,11 @@ void AddRemoveSelection::populateAvailableList() {
                 reducedTooltipList = reducedListByIndex(_tooltipList,unSelectedIndex);
             }
         }
-
         // Now prepare the items for model
         QList<QStandardItem*> itemList;
         for (auto idx = 0 ; idx < reducedList.size() ; ++idx) {
-            QStandardItem* item = new QStandardItem(reducedList.at(idx));            
+            QStandardItem* item = new QStandardItem(reducedList.at(idx));
+            item->setDropEnabled(false);
             if (!reducedTooltipList.empty()) {
                 item->setData(reducedTooltipList.at(idx), Qt::ToolTipRole);
             }
@@ -357,15 +356,16 @@ void AddRemoveSelection::addItems(const QModelIndexList &selections) {
     ui->_availableListView->setAutoScroll(false);
     QModelIndexList leftSelections = selections;
     // Get the order of index sorted so it can be removed from the left list correctly.
-    // Unfortunately, std::greater<QModelIndex> doesn't work in this case. Using a lambda function instead;
+    // Unfortunately, std::greater<QModelIndex> doesn't work in this case so I use a lambda function instead;
     std::sort(leftSelections.begin(), leftSelections.end(),
               [](const QModelIndex &a, const QModelIndex &b) { return b < a; });
     std::vector<unsigned int> backSortedIndex;
     unsigned int rowCount = unsigned(_selectedItemModel.rowCount());
+    // Prepare items to be added
     for (const QModelIndex &idx : leftSelections) {
-        QString varName = idx.data().toString();
+        QString varName = idx.data().toString(); // Copy the item
         QStandardItem* selectedItem = new QStandardItem();
-        selectedItem->setFlags(selectedItem->flags() ^ (Qt::ItemIsDropEnabled));
+        selectedItem->setDropEnabled(false);
         if (_validNameCheck) {
             selectedItem->setToolTip(varName);
             makeUnderscoreVar(varName);
@@ -475,6 +475,30 @@ unsigned int AddRemoveSelection::findNextRowInAvailableList(unsigned int rowNum,
     return rowNum;
 }
 
+void AddRemoveSelection::checkItemNameError(QStandardItem *item) {
+    QString itemText = item->text();
+    QString message = "";
+    // Search for duplicate
+    if (_selectedItemModel.findItems(itemText).size()>1) {
+        QString newItemText = duplicateNameHandler(itemText);
+        message += "<b>\"" + itemText + "\"</b> will be replace with <b>\"" + newItemText + "\"</b>";
+        message = "<b>Duplicate name found!</b><br><br>" + message;
+        messageBox(message);
+        item->setText(newItemText);
+    }
+    // Force to replace with valid name if necessary
+    else if (_validNameCheck) {
+        QString validText = itemText;
+        if (itemText.indexOf(QRegularExpression("[^a-zA-Z0-9_]")) != -1) {
+            makeUnderscoreVar(validText);
+            message += "<b>\"" + itemText + "\"</b> will be replaced with <b>\"" + validText + "\"</b>";
+            message = "<b>Name is invalid! Specail characters will be replaced with \"_\"</b><br><br>" + message;
+            messageBox(message);
+            item->setText(validText);
+        }
+    }
+}
+
 void AddRemoveSelection::makeUnderscoreVar(QString &str) {
     str.replace(QRegularExpression("[^a-zA-Z0-9_]"), QString("_"));
 }
@@ -510,47 +534,6 @@ bool AddRemoveSelection::eventFilter(QObject *object, QEvent *event) {
 }
 
 /*
- * This is the SLOT handler triggered by QStandardItemModel::itemChanged()
- * Both drag/dop event and the itemChanged event would be triggered.
- * Therefore, we have to use some means to distinguish the signal sources.
- * I used `_itemFromMove` boolean that was set during the DropEvent of
- * ListViewand unset after the reorder process complete. The method was
- * implemented for handling renaming collision and incompatibility.
- * Remind that changing item's text also results in firing on the
- * itemChange SIGNAL. So I use _renameEvent to indicate the ongoing renaming
- * process when it's set.
-*/
-void AddRemoveSelection::itemChangeCheck(QStandardItem *item) {
-    if (!_itemFromMove) {
-        if (!_renameEvent) {
-            _renameEvent = true;
-            QString itemText = item->text();
-            QString message = "";
-            // Search for duplicate
-            if (_selectedItemModel.findItems(itemText).size()>1) {
-                QString newItemText = duplicateNameHandler(itemText);
-                message += "<b>\"" + itemText + "\"</b> will be replace with <b>\"" + newItemText + "\"</b>";
-                message = "<b>Duplicate name found!</b><br><br>" + message;
-                messageBox(message);
-                item->setText(newItemText);
-            }
-            // Force to replace with valid name if necessary
-            else if (_validNameCheck) {
-                QString validText = itemText;
-                if (itemText.indexOf(QRegularExpression("[^a-zA-Z0-9_]")) != -1) {
-                    makeUnderscoreVar(validText);
-                    message += "<b>\"" + itemText + "\"</b> will be replaced with <b>\"" + validText + "\"</b>";
-                    message = "<b>Name is invalid! Specail characters will be replaced with \"_\"</b><br><br>" + message;
-                    messageBox(message);
-                    item->setText(validText);
-                }
-            }
-        }
-        _renameEvent = false;
-    }
-}
-
-/*
  * The QStandardItemModel::rowsInserted and QStandardItemModel::rowsRemoved SIGNALs
  * would be triggered when the reordering happens because the reorder wasn't
  * implemented as take out/put back, and yet it's an insert and delete process.
@@ -564,7 +547,7 @@ void AddRemoveSelection::itemChangeCheck(QStandardItem *item) {
  * that we don't know where it's been moved from. However, I realize that, the
  * QListView::selectionModel has that information. I guess there might be other
  * approach to gain that information but this is the best I can think of. The
- * input arguments of this SLOP has no parent (parent.raw() == -1, and
+ * input arguments of this SLOT has no parent (parent.raw() == -1, and
  * parent == QModelIndex()) in this case. I used the first position and the number of
  * about-to-insert items (last-first+1) to find where to insert in the
  * `_selectedListIndex`. One thing I learned is that the return values of
@@ -573,7 +556,7 @@ void AddRemoveSelection::itemChangeCheck(QStandardItem *item) {
  * the inserted items. The actual position of the originated selected item must account
  * for that. Also the inserted items are sorted in the QListView.
 */
-void AddRemoveSelection::whenRowsInserted(const QModelIndex &parent, int first, int last) {
+void AddRemoveSelection::onRowsInserted(const QModelIndex &parent, int first, int last) {
     (void)parent;
     if (_itemFromMove) {
         _numOfMovedItem = unsigned(last - first +1);
@@ -584,10 +567,10 @@ void AddRemoveSelection::whenRowsInserted(const QModelIndex &parent, int first, 
                 itemIndexToBeInsert.push_back(_selectedListIndex.at(rowIdx));
             }
             else {
-                itemIndexToBeInsert.push_back(_selectedListIndex.at(int(rowIdx-_numOfMovedItem)));
+                itemIndexToBeInsert.push_back(_selectedListIndex.at(rowIdx-_numOfMovedItem));
             }
         }
-         std::sort(itemIndexToBeInsert.begin(),itemIndexToBeInsert.end());
+         std::sort(itemIndexToBeInsert.begin(),itemIndexToBeInsert.end()); // TODO: why do we need to sort?
         _selectedListIndex.insert(_selectedListIndex.begin()+first,
                     itemIndexToBeInsert.begin(),itemIndexToBeInsert.end());
     }
@@ -600,7 +583,7 @@ void AddRemoveSelection::whenRowsInserted(const QModelIndex &parent, int first, 
  *  to last). Becuas we have marked the total number of items about to be removed, we
  * conclude the process when the counter (_numOfMovedItem) reaches 0.
 */
-void AddRemoveSelection::whenRowsRemoved(const QModelIndex &parent, int first, int last) {
+void AddRemoveSelection::onRowsRemoved(const QModelIndex &parent, int first, int last) {
     (void)parent;
     if (_itemFromMove) {        
         if (_numOfMovedItem > 0) {

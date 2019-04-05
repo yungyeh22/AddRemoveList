@@ -13,6 +13,7 @@
 #include <QStringList>
 #include <QStandardItem>
 #include <qstandarditemmodel.h>
+#include <QAbstractItemDelegate>
 #include <QMessageBox>
 
 namespace Ui {
@@ -21,7 +22,6 @@ class AddRemoveSelection;
 
 namespace Widgets
 {
-
 
 /*
  * AddRemoveSelection class uses add/remove selection lists with left and right panel
@@ -94,10 +94,10 @@ private slots:
     void on__reset_clicked();
     void on__availableListView_doubleClicked(const QModelIndex &index);
     void on__loadListButton_clicked();
-    void on__saveListButton_clicked();
-    void itemChangeCheck(QStandardItem *item);
-    void whenRowsInserted(const QModelIndex &parent, int first, int last);
-    void whenRowsRemoved(const QModelIndex &parent, int first, int last);
+    void on__saveListButton_clicked();    
+    void onRowsInserted(const QModelIndex &parent, int first, int last);
+    void onRowsRemoved(const QModelIndex &parent, int first, int last);
+    void onSelectedViewEditEnd(QWidget *, QAbstractItemDelegate::EndEditHint);
 
 private:
     // Return true if it's currently showing the full list
@@ -126,6 +126,9 @@ private:
 
     // A helper function looks for the appropriate position when remove an item from selected list
     unsigned int findNextRowInAvailableList(unsigned int rowNum, std::vector<unsigned int> tempIndex);
+
+    // Check item name error
+    void checkItemNameError(QStandardItem *item);
 
     // A helper function for replacing special characters with underscores
     void makeUnderscoreVar(QString &str);
