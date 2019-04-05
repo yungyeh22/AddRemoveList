@@ -15,6 +15,7 @@
 #include <qstandarditemmodel.h>
 #include <QAbstractItemDelegate>
 #include <QMessageBox>
+#include <QDebug>
 
 namespace Ui {
 class AddRemoveSelection;
@@ -95,9 +96,9 @@ private slots:
     void on__reset_clicked();
     void on__availableListView_doubleClicked(const QModelIndex &index);
     void on__loadListButton_clicked();
-    void on__saveListButton_clicked();    
-    void onRowsInserted(const QModelIndex &parent, int first, int last);
-    void onRowsRemoved(const QModelIndex &parent, int first, int last);
+    void on__saveListButton_clicked();
+    void onSelectedListRowsInserted(const QModelIndex &parent, int first, int last);
+    void onSelectedListRowsRemoved(const QModelIndex &parent, int first, int last);
     void onSelectedViewEditEnd(QWidget *, QAbstractItemDelegate::EndEditHint);
 
 private:
@@ -106,6 +107,9 @@ private:
 
     // Change between full/short list
     void populateAvailableList();
+
+    // Update selected list after items move
+    void updateSelectedList(const QModelIndexList &selections);
 
     // Add items to the right listview
     void addItems(const QModelIndexList &selections);
@@ -148,8 +152,8 @@ private: // Vars
     QStandardItemModel _availableItemModel;
     QStandardItemModel _selectedItemModel;
     QStringList _fullList;
-    QStringList _tooltipList;
-    std::vector<unsigned int> _selectedListIndex;
+    QStringList _tooltipList;    
+    std::vector<unsigned int> _selectedListIndex;    
     std::vector<unsigned int> _shortListIndex;
     bool _validNameCheck = false;
     // Variables helps on determine current action
@@ -158,7 +162,6 @@ private: // Vars
     bool _itemsSelectedInAvailableView = false;
     bool _itemsSelectedInSelectedView = false;
     unsigned int _numOfMovedItem;
-    std::vector<unsigned int> _itemIndexToBeRemoved;
 
 protected:
     bool eventFilter(QObject *object, QEvent *event) override;

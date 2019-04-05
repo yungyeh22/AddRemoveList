@@ -59,8 +59,8 @@ AddRemoveSelection::AddRemoveSelection(QWidget *parent) :
      * The strategy here is using the dropEvent from the QListView, and then connect to the inserted/removed signals
      * for managing the _selectedListIndex.
     */
-    connect(&_selectedItemModel,&QStandardItemModel::rowsInserted,this,&AddRemoveSelection::onRowsInserted);
-    connect(&_selectedItemModel,&QStandardItemModel::rowsRemoved,this,&AddRemoveSelection::onRowsRemoved);
+    connect(&_selectedItemModel,&QStandardItemModel::rowsInserted,this,&AddRemoveSelection::onSelectedListRowsInserted);
+    connect(&_selectedItemModel,&QStandardItemModel::rowsRemoved,this,&AddRemoveSelection::onSelectedListRowsRemoved);
     // Check drap / drop event signals without reimplementing the event functions
     ui->_selectedListView->viewport()->installEventFilter(this);
     ui->_availableListView->viewport()->installEventFilter(this);
@@ -356,42 +356,47 @@ void AddRemoveSelection::populateAvailableList() {
     }
 }
 
-void AddRemoveSelection::addItems(const QModelIndexList &selections) {
-    ui->_availableListView->setAutoScroll(false);
-    QModelIndexList leftSelections = selections;
-    // Get the order of index sorted so it can be removed from the left list correctly.
-    // Unfortunately, std::greater<QModelIndex> doesn't work in this case so I use a lambda function instead;
-    std::sort(leftSelections.begin(), leftSelections.end(),
-              [](const QModelIndex &a, const QModelIndex &b) { return b < a; });
+void AddRemoveSelection::updateSelectedList(const QModelIndexList &selections) {
     std::vector<unsigned int> backSortedIndex;
-    unsigned int rowCount = unsigned(_selectedItemModel.rowCount());
-    // Prepare items to be added
-    for (const QModelIndex &idx : leftSelections) {
-        QString varName = idx.data().toString(); // Copy the item
-        QStandardItem* selectedItem = new QStandardItem();
-        selectedItem->setDropEnabled(false);
-        if (_validNameCheck) {
-            selectedItem->setToolTip(varName);
-            makeUnderscoreVar(varName);
-        }
-        selectedItem->setText(varName);
-        _selectedItemModel.insertRow(int(rowCount), selectedItem);
+    for (const QModelIndex &idx : selections) {
         QString escData = QRegularExpression::escape(idx.data().toString());
         backSortedIndex.push_back(unsigned(_fullList.indexOf(QRegularExpression(escData)))); // Save _fullList index that moved
-        _availableItemModel.removeRow(idx.row()); // Remove from the highest order
     }
-    // Put elements in the right list in the correct order
     std::reverse(backSortedIndex.begin(), backSortedIndex.end());
     for (const unsigned int &idx : backSortedIndex) {
         _selectedListIndex.push_back(idx);
     }
-    // Show warning message
     if (!_selectedListIndex.empty() && _validNameCheck) {
         ui->_messageLabel->setHidden(false);
     }
     else {
         ui->_messageLabel->setHidden(true);
     }
+}
+
+void AddRemoveSelection::addItems(const QModelIndexList &selections) {
+    ui->_availableListView->setAutoScroll(false);
+    QModelIndexList leftSelections = selections;
+    // Get the order of index reserve sorted so it can be removed from the left list correctly.
+    // Unfortunately, std::greater<QModelIndex> doesn't work in this case so I use a lambda function instead;
+    std::sort(leftSelections.begin(), leftSelections.end(),
+              [](const QModelIndex &a, const QModelIndex &b) { return b < a; });
+    updateSelectedList(leftSelections);
+    unsigned int rowCount = unsigned(_selectedItemModel.rowCount());
+    // Prepare items to be added
+    for (const QModelIndex &idx : leftSelections) {
+        QString varName = idx.data().toString(); // Copy the item
+        //qDebug() << varName;
+        QStandardItem* selectedItem = new QStandardItem();
+        selectedItem->setDropEnabled(false);
+        if (_validNameCheck) {
+            selectedItem->setToolTip(varName); // Tooltip is available on when the item name might be changed
+            makeUnderscoreVar(varName);
+        }
+        selectedItem->setText(varName);
+        _selectedItemModel.insertRow(int(rowCount), selectedItem);
+        _availableItemModel.removeRow(idx.row()); // Remove from the highest order
+    }    
     ui->_availableListView->setAutoScroll(true);
 }
 
@@ -593,7 +598,7 @@ bool AddRemoveSelection::eventFilter(QObject *object, QEvent *event) {
  * the inserted items. The actual position of the originated selected item must account
  * for that. Also the inserted items are sorted in the QListView.
 */
-void AddRemoveSelection::onRowsInserted(const QModelIndex &parent, int first, int last) {
+void AddRemoveSelection::onSelectedListRowsInserted(const QModelIndex &parent, int first, int last) {
     (void)parent;
     if (currentDragDropAction()==ActionId::ReorderItems) {
         _numOfMovedItem = unsigned(last - first +1);
@@ -611,6 +616,7 @@ void AddRemoveSelection::onRowsInserted(const QModelIndex &parent, int first, in
         _selectedListIndex.insert(_selectedListIndex.begin()+first,
                     itemIndexToBeInsert.begin(),itemIndexToBeInsert.end());
     }
+
 }
 
 /*
@@ -620,7 +626,7 @@ void AddRemoveSelection::onRowsInserted(const QModelIndex &parent, int first, in
  *  to last). Becuas we have marked the total number of items about to be removed, we
  * conclude the process when the counter (_numOfMovedItem) reaches 0.
 */
-void AddRemoveSelection::onRowsRemoved(const QModelIndex &parent, int first, int last) {
+void AddRemoveSelection::onSelectedListRowsRemoved(const QModelIndex &parent, int first, int last) {
     (void)parent;
     if (currentDragDropAction()==ActionId::ReorderItems) {
         if (_numOfMovedItem > 0) {
@@ -633,8 +639,7 @@ void AddRemoveSelection::onRowsRemoved(const QModelIndex &parent, int first, int
             _numOfMovedItem-=unsigned(last-first+1);
         }
         // Complete reorder
-        if (_numOfMovedItem == 0) {          
-          _itemIndexToBeRemoved.clear();
+        if (_numOfMovedItem == 0) {
           _numOfMovedItem = 0;
         }
     }
