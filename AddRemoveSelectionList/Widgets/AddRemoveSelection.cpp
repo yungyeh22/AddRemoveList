@@ -377,10 +377,7 @@ void AddRemoveSelection::updateSelectedList(const QModelIndexList &selections) {
 void AddRemoveSelection::addItems(const QModelIndexList &selections) {
     ui->_availableListView->setAutoScroll(false);
     QModelIndexList leftSelections = selections;
-    // Get the order of index reserve sorted so it can be removed from the left list correctly.
-    // Unfortunately, std::greater<QModelIndex> doesn't work in this case so I use a lambda function instead;
-    std::sort(leftSelections.begin(), leftSelections.end(),
-              [](const QModelIndex &a, const QModelIndex &b) { return b < a; });
+    revSortIndexList(leftSelections);
     updateSelectedList(leftSelections);
     unsigned int rowCount = unsigned(_selectedItemModel.rowCount());
     // Prepare items to be added
@@ -539,6 +536,13 @@ AddRemoveSelection::ActionId AddRemoveSelection::currentDragDropAction() {
     return aId;
 }
 
+void AddRemoveSelection::revSortIndexList(QModelIndexList &indexList) {
+    // Get the order of index reserve sorted so it can be removed from the left list correctly.
+    // Unfortunately, std::greater<QModelIndex> doesn't work in this case so I use a lambda function instead;
+    std::sort(indexList.begin(), indexList.end(),
+              [](const QModelIndex &a, const QModelIndex &b) { return b < a; });
+}
+
 void AddRemoveSelection::messageBox(const QString &title, QMessageBox::Icon icon) {
     QMessageBox msgBox;
     msgBox.setText(title);
@@ -587,36 +591,40 @@ bool AddRemoveSelection::eventFilter(QObject *object, QEvent *event) {
 /*
  * When drag/drop reordering is in process, one of the issues of adding the index is
  * that we don't know where it's been moved from. However, I realize that, the
- * QListView::selectionModel has that information. I guess there might be other
- * approach to gain that information but this is the best I can think of. The
- * input arguments of this SLOT has no parent (parent.raw() == -1, and
- * parent == QModelIndex()) in this case. I used the first position and the number of
- * about-to-insert items (last-first+1) to find where to insert in the
- * `_selectedListIndex`. One thing I learned is that the return values of
- * selectedIndexes() could have two conditions. For one is when the selected item with
- * row index >= first; the other case is row < first. The indexes got expended due to
- * the inserted items. The actual position of the originated selected item must account
- * for that. Also the inserted items are sorted in the QListView.
+ * QListView::selectionModel::selectedIndexes() has that information. The returned list
+ * is the list after insert.
+ * Note that the input arguments of this SLOT has parent.raw() == -1, and
+ * parent == QModelIndex() in this case. I used the "first" position and the number of
+ * about-to-insert items (last-first+1) to find where to insert in the `_selectedListIndex`.
+ * Because the indexes got expended due tothe inserted items, we need to take care two
+ * different conditions, idx.row() < first and idx.row() >= first. The later one needs to
+ * substract the number of items.
+ * Once the insert of `_selectedListIndex` completed, all I need to do is removing the index
+ * using the list from QListView::selectionModel::selectedIndexes() backward.
 */
-void AddRemoveSelection::onSelectedListRowsInserted(const QModelIndex &parent, int first, int last) {
-    (void)parent;
+void AddRemoveSelection::onSelectedListRowsInserted(const QModelIndex &, int first, int last) {
     if (currentDragDropAction()==ActionId::ReorderItems) {
-        _numOfMovedItem = unsigned(last - first +1);
+        unsigned int numOfMovedItem = unsigned(last - first +1);
+        QModelIndexList selectedList = ui->_selectedListView->selectionModel()->selectedIndexes();
         std::vector<unsigned int> itemIndexToBeInsert;
-        for (const QModelIndex &index : ui->_selectedListView->selectionModel()->selectedIndexes()) {
+        for (const QModelIndex &index : selectedList) {
             unsigned int rowIdx = unsigned(index.row());
             if (index.row() < first) {
                 itemIndexToBeInsert.push_back(_selectedListIndex.at(rowIdx));
             }
             else {
-                itemIndexToBeInsert.push_back(_selectedListIndex.at(rowIdx-_numOfMovedItem));
+                itemIndexToBeInsert.push_back(_selectedListIndex.at(rowIdx - numOfMovedItem));
             }
-        }
-         std::sort(itemIndexToBeInsert.begin(),itemIndexToBeInsert.end()); // TODO: why do we need to sort?
+        }         
         _selectedListIndex.insert(_selectedListIndex.begin()+first,
                     itemIndexToBeInsert.begin(),itemIndexToBeInsert.end());
+        // Remove indexes from their old positions
+        revSortIndexList(selectedList); // Reverse the list so we can remove the index backward
+        for (const QModelIndex &index : selectedList) {
+            unsigned int rowIdx = unsigned(index.row());
+            _selectedListIndex.erase(_selectedListIndex.begin() + rowIdx);
+        }
     }
-
 }
 
 /*
@@ -626,23 +634,7 @@ void AddRemoveSelection::onSelectedListRowsInserted(const QModelIndex &parent, i
  *  to last). Becuas we have marked the total number of items about to be removed, we
  * conclude the process when the counter (_numOfMovedItem) reaches 0.
 */
-void AddRemoveSelection::onSelectedListRowsRemoved(const QModelIndex &parent, int first, int last) {
-    (void)parent;
-    if (currentDragDropAction()==ActionId::ReorderItems) {
-        if (_numOfMovedItem > 0) {
-            if (first == last) {
-                _selectedListIndex.erase(_selectedListIndex.begin()+first);
-            }
-            else {
-                _selectedListIndex.erase(_selectedListIndex.begin()+first,_selectedListIndex.begin()+last+1);
-            }
-            _numOfMovedItem-=unsigned(last-first+1);
-        }
-        // Complete reorder
-        if (_numOfMovedItem == 0) {
-          _numOfMovedItem = 0;
-        }
-    }
+void AddRemoveSelection::onSelectedListRowsRemoved(const QModelIndex &, int first, int last) {
 }
 
 void AddRemoveSelection::onSelectedViewEditEnd(QWidget *, QAbstractItemDelegate::EndEditHint) {

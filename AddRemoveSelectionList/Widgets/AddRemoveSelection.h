@@ -97,8 +97,8 @@ private slots:
     void on__availableListView_doubleClicked(const QModelIndex &index);
     void on__loadListButton_clicked();
     void on__saveListButton_clicked();
-    void onSelectedListRowsInserted(const QModelIndex &parent, int first, int last);
-    void onSelectedListRowsRemoved(const QModelIndex &parent, int first, int last);
+    void onSelectedListRowsInserted(const QModelIndex &, int first, int last);
+    void onSelectedListRowsRemoved(const QModelIndex &, int first, int last);
     void onSelectedViewEditEnd(QWidget *, QAbstractItemDelegate::EndEditHint);
 
 private:
@@ -143,6 +143,9 @@ private:
 
     // Itme drop & drop action identifier
     ActionId currentDragDropAction();
+
+    // Reverse sort QModelIndexList
+    void revSortIndexList(QModelIndexList & indexList);
 
     // Display warning message
     void messageBox(const QString &title, QMessageBox::Icon icon = QMessageBox::Warning);    
