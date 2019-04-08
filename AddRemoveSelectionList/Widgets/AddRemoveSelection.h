@@ -1,9 +1,11 @@
-//*************************************************************************************************
+﻿//*************************************************************************************************
 //                Revision Record
 //  Date         Issue      Author               Description
 // ----------  ---------  ---------------  --------------------------------------------------------
 // 10/30/2018      -       Yung-Yeh Chang   Original Release
 // 03/30/2019      -       Yung-Yeh Chang   Fixed auto scroll issue and a crash due to special characters
+// 04/07/2019      -       Yung-Yeh Chang   Rewrite add/remove functions for better compatibility
+//                                          and prepare for full drag/drop. Drag/drop add items completed.
 //*************************************************************************************************
 #ifndef ADDREMOVESELECTION_H
 #define ADDREMOVESELECTION_H
@@ -59,11 +61,11 @@ public:
     void setFullList (const QStringList &fullList, const QStringList &toolTipList);
 
     // Set a new full list with its associated tooltip list and provide an index for a shorter list
-    void setFullList (const QStringList &fullList, const QStringList &toolTipList, const std::vector<unsigned int> &listIndex);
+    void setFullList (const QStringList &fullList, const QStringList &toolTipList, const std::vector<int> &shortListIndex);
 
     // Initialize the short list with the index range of the full list.
     // Some necessary checks makes sure the range respects the full list.
-    void setShortListIndex(const std::vector<unsigned int> &listIndex);
+    void setShortListIndex(const std::vector<int> &listIndex);
 
     // Return a QStringlist of the short list (from the index range of the full list)
     QStringList getShortList();
@@ -75,7 +77,7 @@ public:
     QStringList getSelectedItemsList(bool raw = true);
 
     // Return the number of selected items
-    unsigned int getSelectedItemCount () const { return unsigned(_selectedListIndex.size()); }
+    int getSelectedItemCount () const { return _selectedListIndex.size(); }
 
     // Return the list of tooptips.
     QStringList toolTips() { return _tooltipList ; }
@@ -97,6 +99,8 @@ private slots:
     void on__availableListView_doubleClicked(const QModelIndex &index);
     void on__loadListButton_clicked();
     void on__saveListButton_clicked();
+//    void onAvailableListRowsInserted(const QModelIndex &, int first, int last);
+//    void onAvailableListRowsRemoved(const QModelIndex &, int first, int last);
     void onSelectedListRowsInserted(const QModelIndex &, int first, int last);
     void onSelectedListRowsRemoved(const QModelIndex &, int first, int last);
     void onSelectedViewEditEnd(QWidget *, QAbstractItemDelegate::EndEditHint);
@@ -108,8 +112,20 @@ private:
     // Change between full/short list
     void populateAvailableList();
 
-    // Update selected list after items move
-    void updateSelectedList(const QModelIndexList &selections);
+    // Produce a new item for model/view
+        QStandardItem* itemFactory(QString name, QString tooltip);
+
+    // Update selected list after items add to selectedList
+    void updateSelectedListForAdd(const QModelIndexList &selections, const int &index);
+
+    // Update selected list after item reorder in the selectedList
+    void updateSelectedListAfterReorder(const QModelIndexList &selections, const int &first, const int &last);
+
+    // Update selected list after item reorder in the selectedList
+    void updateSelectedListForRemove(const QModelIndexList &selections);
+
+    // Make items
+    void makeItems();
 
     // Add items to the right listview
     void addItems(const QModelIndexList &selections);
@@ -127,10 +143,10 @@ private:
     void saveSelectedItemsListToFile(const QString &filename);
 
     // Return a reduced stringlist based on index
-    QStringList reducedListByIndex(const QStringList &fList, const std::vector<unsigned int> index);
+    QStringList reducedListByIndex(const QStringList &fList, const std::vector<int> index);
 
     // A helper function looks for the appropriate position when remove an item from selected list
-    unsigned int findNextRowInAvailableList(unsigned int rowNum, std::vector<unsigned int> tempIndex);
+    int findNextRowInAvailableList(int itemIdx, const std::vector<int> &removedList);
 
     // Check item name error
     void checkItemNameError(QStandardItem *item);
@@ -141,8 +157,11 @@ private:
     // A helper function to handle duplicate item name
     QString duplicateNameHandler(const QString &str);
 
-    // Itme drop & drop action identifier
+    // Itme drag & drop action identifier
     ActionId currentDragDropAction();
+
+    // Reset drag & drop action status
+    void resetDragDropActionStatus();
 
     // Reverse sort QModelIndexList
     void revSortIndexList(QModelIndexList & indexList);
@@ -154,17 +173,18 @@ private: // Vars
     Ui::AddRemoveSelection *ui;
     QStandardItemModel _availableItemModel;
     QStandardItemModel _selectedItemModel;
+    QList<QStandardItem*> _fullItemsList;
     QStringList _fullList;
     QStringList _tooltipList;    
-    std::vector<unsigned int> _selectedListIndex;    
-    std::vector<unsigned int> _shortListIndex;
+    std::vector<int> _selectedListIndex;
+    std::vector<int> _shortListIndex;
     bool _validNameCheck = false;
     // Variables helps on determine current action
     bool _itemsDropInSelectedView = false;
     bool _itemsDropInAvailableView = false;
     bool _itemsSelectedInAvailableView = false;
     bool _itemsSelectedInSelectedView = false;
-    unsigned int _numOfMovedItem;
+    int _numOfMovedItem;
 
 protected:
     bool eventFilter(QObject *object, QEvent *event) override;

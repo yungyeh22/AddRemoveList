@@ -6,6 +6,8 @@
 // 10/31/2018      -       Yung-Yeh Chang   Better view experience when doing add/remove/reset
 // 03/30/2019      -       Yung-Yeh Chang   Fixed auto scroll issue and a crash due to special characters
 // 03/31/2019      -       Yung-Yeh Chang   Separate save / load items list process to a new class
+// 04/07/2019      -       Yung-Yeh Chang   Rewrite add/remove functions for better compatibility
+//                                          and prepare for full drag/drop. Drag/drop add items completed.
 //*************************************************************************************************
 #include "AddRemoveSelection.h"
 #include "ui_AddRemoveSelection.h"
@@ -81,6 +83,7 @@ void AddRemoveSelection::setFullList (const QStringList &fullList) {
     _fullList = fullList;
     _tooltipList.clear();
     _shortListIndex.clear();
+    makeItems();
     populateAvailableList();
 }
 
@@ -91,33 +94,35 @@ void AddRemoveSelection::setFullList(const QStringList &fullList, const QStringL
         _tooltipList = tooltipList;
     }
     _shortListIndex.clear();
+    makeItems();
     populateAvailableList();
 }
 
-void AddRemoveSelection::setFullList(const QStringList &fullList, const QStringList &tooltipList, const std::vector<unsigned int> &listIndex) {
+void AddRemoveSelection::setFullList(const QStringList &fullList, const QStringList &tooltipList, const std::vector<int> &shortListIndex) {
     _fullList = fullList;
     _tooltipList.clear();
     if (tooltipList.size() == fullList.size()) {
         _tooltipList = tooltipList;
     }
-    setShortListIndex(listIndex);
+    setShortListIndex(shortListIndex);
+    makeItems();
+    populateAvailableList();
 }
 
-void AddRemoveSelection::setShortListIndex(const std::vector<unsigned int> &listIndex) {
+void AddRemoveSelection::setShortListIndex(const std::vector<int> &listIndex) {
     _shortListIndex = listIndex;
     // Remove duplicate elements and sort
     std::sort(_shortListIndex.begin(), _shortListIndex.end());
     _shortListIndex.erase(std::unique( _shortListIndex.begin(), _shortListIndex.end() ), _shortListIndex.end());
     // Remove out of bound index
     _shortListIndex.erase(std::find_if(_shortListIndex.begin(),_shortListIndex.end(),
-                    std::bind2nd(std::greater<unsigned int>(),_fullList.size()-1)),
+                    std::bind2nd(std::greater<int>(),_fullList.size()-1)),
                     _shortListIndex.end());
     // Display the checkbox if we do need to switch between lists
      if ((_shortListIndex.size() != unsigned(_fullList.size())) && !_fullList.empty()) {
          ui->_fullListCheckBox->setHidden(false);
          ui->_fullListCheckBox->setChecked(false);
-     }
-     populateAvailableList();
+     }     
 }
 
 QStringList AddRemoveSelection::getShortList() {
@@ -155,7 +160,7 @@ void AddRemoveSelection::loadSelectedItemsFromLists(const QStringList &sList_raw
         int nIndex = _fullList.indexOf(sList_raw.at(idx));
         if (nIndex != -1) {
             // Store index
-            _selectedListIndex.push_back(unsigned(nIndex));
+            _selectedListIndex.push_back(nIndex);
             // Add items
             QStandardItem* selectedItem = new QStandardItem();
             selectedItem->setDropEnabled(false);
@@ -284,10 +289,10 @@ bool AddRemoveSelection::isFullList() {
     return isFull;
 }
 
-QStringList AddRemoveSelection::reducedListByIndex(const QStringList &fList, const std::vector<unsigned int> index) {
+QStringList AddRemoveSelection::reducedListByIndex(const QStringList &fList, const std::vector<int> index) {
     QStringList reducedList;
-    for (const unsigned int &idx : index) {
-        if (idx < unsigned(fList.size())) {
+    for (const int &idx : index) {
+        if (idx < fList.size()) {
             reducedList << fList.at(int(idx));
         }
     }
@@ -295,77 +300,52 @@ QStringList AddRemoveSelection::reducedListByIndex(const QStringList &fList, con
 }
 
 void AddRemoveSelection::populateAvailableList() {
-    _availableItemModel.clear();
-    // Preparing the string list
-    QStringList reducedList;
-    QStringList reducedTooltipList;
-    std::vector<unsigned int> unSelectedIndex;
-    std::vector<unsigned int> sortedIndex(_selectedListIndex);
-    unsigned int sIdx = 0;
-    if (!_fullList.isEmpty()) {
-        if (isFullList()) { // Display full list
-            if (_selectedListIndex.empty()) {
-                reducedList = _fullList;
-                reducedTooltipList = _tooltipList;
-            }
-            else {
-                // Construct a index based on selected item index
-                std::sort(sortedIndex.begin(),sortedIndex.end());
-                // Create a index with only required item
-                for (unsigned int idx = 0 ; idx < unsigned(_fullList.size()) ; ++ idx) {
-                    if (!sortedIndex.empty() && (sIdx < sortedIndex.size())) {
-                        if (idx == sortedIndex.at(sIdx)) {
-                            sIdx++;
-                            continue;
-                        }
-                    }
-                    unSelectedIndex.push_back(idx);
-                }
-                reducedList = reducedListByIndex(_fullList,unSelectedIndex);
-                if (!_tooltipList.empty()) {
-                    reducedTooltipList = reducedListByIndex(_tooltipList,unSelectedIndex);
-                }
-            }
+    if (_availableItemModel.rowCount() != 0) {
+        _availableItemModel.takeColumn(0); // Remove the ownership
+        _availableItemModel.clear(); // Clear display
+    }
+    if (isFullList()) {
+        _availableItemModel.appendColumn(_fullItemsList);
+    }
+    else {
+        if (_shortListIndex.empty()) {
+            _availableItemModel.appendColumn(_fullItemsList);
         }
-        else { // Short list
-            // It will be easier to use find since we've had the index for the short list.
-            unSelectedIndex = _shortListIndex;
-            std::sort(sortedIndex.begin(),sortedIndex.end(),std::greater<unsigned int>());
-            for (const auto &idx : sortedIndex) {
-                auto result = std::find(unSelectedIndex.begin(),unSelectedIndex.end(),idx);
-                if (result != unSelectedIndex.end()) {
-                    unSelectedIndex.erase(result);
-                }
+        else {
+            QList<QStandardItem*> shortItemsList;
+            for (const auto &index : _shortListIndex) {
+                shortItemsList.push_back(_fullItemsList.at(index));
             }
-            reducedList = reducedListByIndex(_fullList,unSelectedIndex);
-            if (!_tooltipList.empty()) {
-                reducedTooltipList = reducedListByIndex(_tooltipList,unSelectedIndex);
-            }
+            _availableItemModel.appendColumn(shortItemsList);
         }
-        // Now prepare the items for model
-        QList<QStandardItem*> itemList;
-        for (auto idx = 0 ; idx < reducedList.size() ; ++idx) {
-            QStandardItem* item = new QStandardItem(reducedList.at(idx));
-            item->setDropEnabled(false);
-            if (!reducedTooltipList.empty()) {
-                item->setData(reducedTooltipList.at(idx), Qt::ToolTipRole);
-            }
-            itemList << item;
-        }
-        _availableItemModel.appendColumn(itemList);
     }
 }
 
-void AddRemoveSelection::updateSelectedList(const QModelIndexList &selections) {
-    std::vector<unsigned int> backSortedIndex;
-    for (const QModelIndex &idx : selections) {
-        QString escData = QRegularExpression::escape(idx.data().toString());
-        backSortedIndex.push_back(unsigned(_fullList.indexOf(QRegularExpression(escData)))); // Save _fullList index that moved
+QStandardItem *AddRemoveSelection::itemFactory(QString name, QString tooltip) {
+    QStandardItem* item = new QStandardItem(name);
+    item->setDropEnabled(false);
+    if (!tooltip.isEmpty()) {
+        item->setData(tooltip, Qt::ToolTipRole);
     }
-    std::reverse(backSortedIndex.begin(), backSortedIndex.end());
-    for (const unsigned int &idx : backSortedIndex) {
-        _selectedListIndex.push_back(idx);
+    return item;
+}
+
+void AddRemoveSelection::updateSelectedListForAdd(const QModelIndexList &selections, const int &index) {
+    std::vector<int> itemIndexToBeInsert;
+    for (const QModelIndex &index : selections) {
+        QString escData = QRegularExpression::escape(index.data().toString());
+        int firstLoc = _fullList.indexOf(QRegularExpression(escData));
+        itemIndexToBeInsert.push_back(firstLoc); // Save _fullList index that moved
     }
+    if (index == -1) {
+        for (const int &index : itemIndexToBeInsert) {
+            _selectedListIndex.push_back(index);
+        }
+    }
+    else {
+        _selectedListIndex.insert(_selectedListIndex.begin()+index,itemIndexToBeInsert.begin(),itemIndexToBeInsert.end());
+    }
+    // Warning message
     if (!_selectedListIndex.empty() && _validNameCheck) {
         ui->_messageLabel->setHidden(false);
     }
@@ -374,55 +354,30 @@ void AddRemoveSelection::updateSelectedList(const QModelIndexList &selections) {
     }
 }
 
-void AddRemoveSelection::addItems(const QModelIndexList &selections) {
-    ui->_availableListView->setAutoScroll(false);
-    QModelIndexList leftSelections = selections;
-    revSortIndexList(leftSelections);
-    updateSelectedList(leftSelections);
-    unsigned int rowCount = unsigned(_selectedItemModel.rowCount());
-    // Prepare items to be added
-    for (const QModelIndex &idx : leftSelections) {
-        QString varName = idx.data().toString(); // Copy the item
-        //qDebug() << varName;
-        QStandardItem* selectedItem = new QStandardItem();
-        selectedItem->setDropEnabled(false);
-        if (_validNameCheck) {
-            selectedItem->setToolTip(varName); // Tooltip is available on when the item name might be changed
-            makeUnderscoreVar(varName);
+void AddRemoveSelection::updateSelectedListAfterReorder(const QModelIndexList &selections, const int &first, const int &last) {
+    unsigned int numOfMovedItem = unsigned(last - first + 1);
+    std::vector<int> itemIndexToBeInsert;
+    for (const QModelIndex &index : selections) {
+        unsigned int rowIdx = unsigned(index.row());
+        if (index.row() < first) {
+            itemIndexToBeInsert.push_back(_selectedListIndex.at(rowIdx));
         }
-        selectedItem->setText(varName);
-        _selectedItemModel.insertRow(int(rowCount), selectedItem);
-        _availableItemModel.removeRow(idx.row()); // Remove from the highest order
-    }    
-    ui->_availableListView->setAutoScroll(true);
-}
-
-void AddRemoveSelection::removeItems(const QModelIndexList &selections) {
-    ui->_selectedListView->setAutoScroll(false);
-    QModelIndexList rightSelections = selections;
-    std::vector<unsigned int> tempInsertedIndex;
-    // Add items back to the left panel
-    for (const QModelIndex &idx : rightSelections) {
-        unsigned int rowIdx = unsigned(idx.row());
-        if (!isFullList() && // If a selected-to-remove item was not exist in the short list and the left panel is showing the short list
-                             // we quickly skip the index because it doesn't need shown.
-            !std::binary_search(_shortListIndex.begin(),_shortListIndex.end(), _selectedListIndex.at(rowIdx))) {
-            continue;
-        }
-        else { // Once we know it needs to be added back to the left panel, we find the next available location (based on its originated order)
-               // in the left panel and insert it.
-            tempInsertedIndex.push_back(_selectedListIndex.at(rowIdx));
-            unsigned int rowNum = findNextRowInAvailableList(_selectedListIndex.at(rowIdx), tempInsertedIndex);
-            QString itemText = _fullList.at(int(_selectedListIndex.at(rowIdx)));
-            _availableItemModel.insertRow(int(rowNum), new QStandardItem(itemText));
+        else {
+            itemIndexToBeInsert.push_back(_selectedListIndex.at(rowIdx - numOfMovedItem));
         }
     }
-    std::sort(rightSelections.begin(), rightSelections.end(),
-              [](const QModelIndex &a, const QModelIndex &b) { return b < a; });
-    for (auto idx = 0 ; idx < rightSelections.size() ; ++idx) {
-        int rowNum = rightSelections.at(idx).row();
-        _selectedListIndex.erase(_selectedListIndex.begin() + rowNum);
-        _selectedItemModel.removeRow(rowNum);
+    _selectedListIndex.insert(_selectedListIndex.begin()+first,
+                itemIndexToBeInsert.begin(),itemIndexToBeInsert.end());
+    // Remove indexes from their old positions
+    for (auto index = selections.rbegin() ; index != selections.rend() ; ++index) {
+        int rowIdx = index->row();
+        _selectedListIndex.erase(_selectedListIndex.begin() + rowIdx);
+    }
+}
+
+void AddRemoveSelection::updateSelectedListForRemove(const QModelIndexList &selections) {
+    for (auto index = selections.rbegin() ; index != selections.rend() ; ++index) {
+        _selectedListIndex.erase(_selectedListIndex.begin() + index->row());
     }
     // Show warning message
     if (!_selectedListIndex.empty() && _validNameCheck) {
@@ -431,54 +386,90 @@ void AddRemoveSelection::removeItems(const QModelIndexList &selections) {
     else {
         ui->_messageLabel->setHidden(true);
     }
+}
+
+void AddRemoveSelection::makeItems() {
+    for (auto index = 0 ; index < _fullList.size() ; ++index) {
+        QString itemText = _fullList.at(index);
+        QString itemTooltip = (_tooltipList.empty()) ? "" : _tooltipList.at(index);
+        _fullItemsList << itemFactory(itemText, itemTooltip);
+    }
+}
+
+void AddRemoveSelection::addItems(const QModelIndexList &selections) {    
+    ui->_availableListView->setAutoScroll(false);
+    updateSelectedListForAdd(selections, -1); // Update list
+    // Prepare items to be added
+    int rowNum = _selectedItemModel.rowCount();
+    for (auto index = selections.rbegin() ; index != selections.rend() ; ++index) {
+        _selectedItemModel.insertRow(rowNum, _availableItemModel.takeItem(index->row()));
+        _availableItemModel.removeRow(index->row()); // Remove from the highest order
+    }
+    ui->_availableListView->setAutoScroll(true);
+}
+
+void AddRemoveSelection::removeItems(const QModelIndexList &selections) {
+    ui->_selectedListView->setAutoScroll(false);
+    // Move items back to the left panel
+    std::vector<int> removedList;
+    for (auto index = selections.rbegin() ; index != selections.rend() ; ++index) {
+        int rowIdx = index->row();
+        int itemIdx = _selectedListIndex.at(unsigned(rowIdx));
+        if (!isFullList() && // If a selected-to-remove item was not exist in the short list and the left panel is showing the short list
+                             // we simply remove the item from the selected view.
+            !std::binary_search(_shortListIndex.begin(),_shortListIndex.end(), itemIdx)) {
+            _selectedItemModel.takeItem(rowIdx);
+            _selectedItemModel.removeRow(rowIdx);
+        }
+        else { // Once we know it needs to be added back to the left panel, we find the next available location (based on its originated order)
+               // in the left panel and insert it.            
+            int rowNum = findNextRowInAvailableList(itemIdx, removedList);
+            _availableItemModel.insertRow(int(rowNum), _selectedItemModel.takeItem(rowIdx));
+            _selectedItemModel.removeRow(rowIdx);
+            removedList.push_back(itemIdx);
+        }
+    }
+    updateSelectedListForRemove(selections); // Update list
+    // Move focus item
     ui->_availableListView->selectionModel()->select(ui->_availableListView->indexAt(
                         ui->_availableListView->viewport()->pos()),QItemSelectionModel::Select);
     ui->_selectedListView->setAutoScroll(false);
 }
 
-unsigned int AddRemoveSelection::findNextRowInAvailableList(unsigned int rowNum, std::vector<unsigned int> tempIndex) {
+int AddRemoveSelection::findNextRowInAvailableList(int itemIdx, const std::vector<int> &removedList) {
+    int nextRowNum = -1;
     // To put back the item to the left listview with the original position in the full list
-    // First, put to the end if the item is the last in the _fulllist
-    if (rowNum == ((isFullList()) ? unsigned(_fullList.size())-1 : _shortListIndex.back())) {
-        rowNum = unsigned(_availableItemModel.rowCount());
+    // First, put to the end if the item is the last in the list
+    if (itemIdx == ((isFullList()) ? (_fullList.size()-1) : _shortListIndex.back())) {
+        nextRowNum = _availableItemModel.rowCount();
     }
     // Second, if nothing in the left listview, put the item at the first row.
     else if (_availableItemModel.rowCount() == 0) {
-        rowNum = 0;
+        nextRowNum = 0;
     }
     // Otherwise...
-    else if (rowNum != 0) {
-        // First, we find the next available index in the stored vector
-        unsigned int nextRowNum = rowNum;
-        for (unsigned int pIdx = 1 ; pIdx < (unsigned(_fullList.size()) - rowNum) ; ++pIdx) {
-            if (!isFullList() &&
-                !std::binary_search(_shortListIndex.begin(),_shortListIndex.end(),rowNum+pIdx)) {
+    else {
+        int nextRowIdx = 0;
+        // Search for the position to insert
+        for (int index = 0 ; index < (_fullList.size() - itemIdx) ; ++index) { // (n - itemIdx) becuase that's the max iteration we need to search
+            nextRowIdx = itemIdx + index + 1;
+            if (!isFullList() && // If it's a short list, keep rolling for the next available position
+                !std::binary_search(_shortListIndex.begin(),_shortListIndex.end(),nextRowIdx)) {
                 continue;
             }
-            else {
-                // Check the log that has been moved back to left listview
-                bool foundInTempIndex = (std::find(tempIndex.begin(), tempIndex.end(), rowNum+pIdx) != tempIndex.end());
-                // Then check the current _selectedListIndex. The value at the left shouldn't exist.
-                bool foundInSelectedListIndex = (std::find(_selectedListIndex.begin(), _selectedListIndex.end(), rowNum+pIdx) != _selectedListIndex.end());
-                // Iterate the index until we found the next nearest item (in the _fulllist) at the left listview.
-                if (foundInTempIndex || !foundInSelectedListIndex) {
-                    nextRowNum = rowNum + pIdx;
+            else { // For either list type(short/full), the location must not exist in the selectedList.
+                   // We also need to account for the item we just returned. We use a new list (removedList) for that purpose.
+                   // The index can be inserted right before the just-rerurned item.
+                bool foundInSelectedList = std::find(_selectedListIndex.begin(),_selectedListIndex.end(),nextRowIdx) != _selectedListIndex.end();
+                bool foundInRemovedList = std::find(removedList.begin(), removedList.end(), nextRowIdx) != removedList.end();
+                if (!foundInSelectedList || foundInRemovedList) {
                     break;
                 }
             }
         }
-        // If the item index is the largest comparing to the item in the left listview, put it at the end.
-        if (nextRowNum == rowNum) {
-            rowNum = unsigned(_availableItemModel.rowCount());
-        }
-        // Otherwise, look for the next available location in the left listview based on previous search
-        // result, use the result to insert the item.
-        else {
-            QList<QStandardItem*> foundItems = _availableItemModel.findItems(_fullList.at(int(nextRowNum)));
-            rowNum = unsigned(_availableItemModel.indexFromItem(foundItems.front()).row());
-        }
+        nextRowNum = _availableItemModel.indexFromItem(_fullItemsList.at(nextRowIdx)).row();
     }
-    return rowNum;
+    return nextRowNum;
 }
 
 void AddRemoveSelection::checkItemNameError(QStandardItem *item) {
@@ -510,7 +501,7 @@ void AddRemoveSelection::makeUnderscoreVar(QString &str) {
 }
 
 QString AddRemoveSelection::duplicateNameHandler(const QString &str) {
-    unsigned int idx = 1;
+    int idx = 1;
     QString newStr = str;
     while (!_selectedItemModel.findItems(newStr).empty()) {
         newStr = str+QString("_%1").arg(idx);
@@ -536,11 +527,11 @@ AddRemoveSelection::ActionId AddRemoveSelection::currentDragDropAction() {
     return aId;
 }
 
-void AddRemoveSelection::revSortIndexList(QModelIndexList &indexList) {
-    // Get the order of index reserve sorted so it can be removed from the left list correctly.
-    // Unfortunately, std::greater<QModelIndex> doesn't work in this case so I use a lambda function instead;
-    std::sort(indexList.begin(), indexList.end(),
-              [](const QModelIndex &a, const QModelIndex &b) { return b < a; });
+void AddRemoveSelection::resetDragDropActionStatus() {
+    _itemsSelectedInAvailableView = false;
+    _itemsSelectedInSelectedView = false;
+    _itemsDropInAvailableView = false;
+    _itemsDropInSelectedView = false;
 }
 
 void AddRemoveSelection::messageBox(const QString &title, QMessageBox::Icon icon) {
@@ -567,6 +558,7 @@ bool AddRemoveSelection::eventFilter(QObject *object, QEvent *event) {
     else if (object == ui->_selectedListView->viewport() && event->type() == QEvent::Drop) {
         _itemsDropInAvailableView = false;
         _itemsDropInSelectedView = true;
+        ui->_availableListView->setDragDropMode(QAbstractItemView::DragDrop);
     }
     else if (object == ui->_availableListView->viewport() && event->type() == QEvent::MouseButtonPress) {
         _itemsSelectedInAvailableView = true;
@@ -575,6 +567,14 @@ bool AddRemoveSelection::eventFilter(QObject *object, QEvent *event) {
     else if (object == ui->_selectedListView->viewport() && event->type() == QEvent::MouseButtonPress) {
         _itemsSelectedInAvailableView = false;
         _itemsSelectedInSelectedView = true;
+    }
+    if (event->type() == QEvent::DragEnter) { // No drop at availableListView for items from availableListView
+        if ((object->parent() == ui->_availableListView) & _itemsSelectedInAvailableView) {
+            ui->_availableListView->setDragDropMode(QAbstractItemView::DragOnly);
+        }
+        else {
+            ui->_availableListView->setDragDropMode(QAbstractItemView::DragDrop);
+        }
     }
     return QObject::eventFilter(object, event);
 }
@@ -586,7 +586,6 @@ bool AddRemoveSelection::eventFilter(QObject *object, QEvent *event) {
  * The purpose of implementing methods in both event is because we have to maintain
  * the _selectedListIndex which store the vector of index for selected items. *
 */
-
 
 /*
  * When drag/drop reordering is in process, one of the issues of adding the index is
@@ -604,26 +603,14 @@ bool AddRemoveSelection::eventFilter(QObject *object, QEvent *event) {
 */
 void AddRemoveSelection::onSelectedListRowsInserted(const QModelIndex &, int first, int last) {
     if (currentDragDropAction()==ActionId::ReorderItems) {
-        unsigned int numOfMovedItem = unsigned(last - first +1);
         QModelIndexList selectedList = ui->_selectedListView->selectionModel()->selectedIndexes();
-        std::vector<unsigned int> itemIndexToBeInsert;
-        for (const QModelIndex &index : selectedList) {
-            unsigned int rowIdx = unsigned(index.row());
-            if (index.row() < first) {
-                itemIndexToBeInsert.push_back(_selectedListIndex.at(rowIdx));
-            }
-            else {
-                itemIndexToBeInsert.push_back(_selectedListIndex.at(rowIdx - numOfMovedItem));
-            }
-        }         
-        _selectedListIndex.insert(_selectedListIndex.begin()+first,
-                    itemIndexToBeInsert.begin(),itemIndexToBeInsert.end());
-        // Remove indexes from their old positions
-        revSortIndexList(selectedList); // Reverse the list so we can remove the index backward
-        for (const QModelIndex &index : selectedList) {
-            unsigned int rowIdx = unsigned(index.row());
-            _selectedListIndex.erase(_selectedListIndex.begin() + rowIdx);
-        }
+        updateSelectedListAfterReorder(selectedList, first, last);
+        resetDragDropActionStatus();
+    }
+    else if (currentDragDropAction() == ActionId::AddItems) {
+        QModelIndexList selectedList = ui->_availableListView->selectionModel()->selectedIndexes();
+        updateSelectedListForAdd(selectedList,first);
+        resetDragDropActionStatus();
     }
 }
 
@@ -635,9 +622,13 @@ void AddRemoveSelection::onSelectedListRowsInserted(const QModelIndex &, int fir
  * conclude the process when the counter (_numOfMovedItem) reaches 0.
 */
 void AddRemoveSelection::onSelectedListRowsRemoved(const QModelIndex &, int first, int last) {
+    if (currentDragDropAction()==ActionId::RemoveItems) {
+
+    }
 }
 
 void AddRemoveSelection::onSelectedViewEditEnd(QWidget *, QAbstractItemDelegate::EndEditHint) {
+    // TODO:Have a context menu for resetting the name
     QStandardItem * item = _selectedItemModel.itemFromIndex(ui->_selectedListView->currentIndex());
     checkItemNameError(item);
 }
