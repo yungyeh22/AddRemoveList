@@ -228,9 +228,10 @@ void AddRemoveSelection::on__removeItemButton_clicked() {
     }
 }
 
-void AddRemoveSelection::on__reset_clicked() {    
-    _selectedListIndex.clear();
+void AddRemoveSelection::on__reset_clicked() {
+    _selectedListIndex.clear();    
     _selectedItemModel.clear();
+    _availableItemModel.clear();
     populateAvailableList();
     ui->_messageLabel->setHidden(true);
     ui->_availableListView->scrollToTop();
@@ -300,25 +301,20 @@ QStringList AddRemoveSelection::reducedListByIndex(const QStringList &fList, con
 }
 
 void AddRemoveSelection::populateAvailableList() {
-    if (_availableItemModel.rowCount() != 0) {
-        _availableItemModel.takeColumn(0); // Remove the ownership
-        _availableItemModel.clear(); // Clear display
-    }
-    if (isFullList()) {
-        _availableItemModel.appendColumn(_fullItemsList);
-    }
-    else {
-        if (_shortListIndex.empty()) {
-            _availableItemModel.appendColumn(_fullItemsList);
+    if (_availableItemModel.rowCount() != 0) {         
+        _availableItemModel.clear(); // Clear model
+    }    
+    QList<QStandardItem*> itemsList;
+    for (auto index = 0 ; index < _fullList.size() ; ++index) {
+        QString itemText = _fullList.at(index);
+        QString itemTooltip = (_tooltipList.empty()) ? "" : _tooltipList.at(index);
+        if (!isFullList() && !_shortListIndex.empty() && !std::binary_search(_shortListIndex.begin(),_shortListIndex.end(),index)) {
+            continue;
         }
-        else {
-            QList<QStandardItem*> shortItemsList;
-            for (const auto &index : _shortListIndex) {
-                shortItemsList.push_back(_fullItemsList.at(index));
-            }
-            _availableItemModel.appendColumn(shortItemsList);
-        }
+        itemsList << itemFactory(itemText, itemTooltip);
     }
+    _availableItemModel.appendColumn(itemsList);
+    ui->_availableListView->scrollToTop();
 }
 
 QStandardItem *AddRemoveSelection::itemFactory(QString name, QString tooltip) {
@@ -389,19 +385,18 @@ void AddRemoveSelection::updateSelectedListForRemove(const QModelIndexList &sele
 }
 
 void AddRemoveSelection::makeItems() {
-    for (auto index = 0 ; index < _fullList.size() ; ++index) {
-        QString itemText = _fullList.at(index);
-        QString itemTooltip = (_tooltipList.empty()) ? "" : _tooltipList.at(index);
-        _fullItemsList << itemFactory(itemText, itemTooltip);
-    }
+
 }
 
 void AddRemoveSelection::addItems(const QModelIndexList &selections) {    
     ui->_availableListView->setAutoScroll(false);
-    updateSelectedListForAdd(selections, -1); // Update list
+    QModelIndexList leftSelections = selections;
+    // Get the order of index sorted so it can be removed in the correct order.
+    sortIndexList(leftSelections);
+    updateSelectedListForAdd(leftSelections, -1); // Update list
     // Prepare items to be added
     int rowNum = _selectedItemModel.rowCount();
-    for (auto index = selections.rbegin() ; index != selections.rend() ; ++index) {
+    for (auto index = leftSelections.rbegin() ; index != leftSelections.rend() ; ++index) {
         _selectedItemModel.insertRow(rowNum, _availableItemModel.takeItem(index->row()));
         _availableItemModel.removeRow(index->row()); // Remove from the highest order
     }
@@ -410,9 +405,12 @@ void AddRemoveSelection::addItems(const QModelIndexList &selections) {
 
 void AddRemoveSelection::removeItems(const QModelIndexList &selections) {
     ui->_selectedListView->setAutoScroll(false);
+    QModelIndexList rightSelections = selections;
+    // Get the order of index sorted so it can be removed in the correct order.
+    sortIndexList(rightSelections);
     // Move items back to the left panel
     std::vector<int> removedList;
-    for (auto index = selections.rbegin() ; index != selections.rend() ; ++index) {
+    for (auto index = rightSelections.rbegin() ; index != rightSelections.rend() ; ++index) {
         int rowIdx = index->row();
         int itemIdx = _selectedListIndex.at(unsigned(rowIdx));
         if (!isFullList() && // If a selected-to-remove item was not exist in the short list and the left panel is showing the short list
@@ -429,10 +427,10 @@ void AddRemoveSelection::removeItems(const QModelIndexList &selections) {
             removedList.push_back(itemIdx);
         }
     }
-    updateSelectedListForRemove(selections); // Update list
+    updateSelectedListForRemove(rightSelections); // Update list
     // Move focus item
     ui->_availableListView->selectionModel()->select(ui->_availableListView->indexAt(
-                        ui->_availableListView->viewport()->pos()),QItemSelectionModel::Select);
+                        ui->_availableListView->viewport()->pos()),QItemSelectionModel::Clear);
     ui->_selectedListView->setAutoScroll(false);
 }
 
@@ -532,6 +530,16 @@ void AddRemoveSelection::resetDragDropActionStatus() {
     _itemsSelectedInSelectedView = false;
     _itemsDropInAvailableView = false;
     _itemsDropInSelectedView = false;
+}
+
+void AddRemoveSelection::sortIndexList(QModelIndexList &indexList, bool rev) {
+    if (rev) {
+        // Unfortunately, std::greater<QModelIndex> doesn't work in this case so I use a lambda function instead;
+        std::sort(indexList.begin(), indexList.end(), [](const QModelIndex &a, const QModelIndex &b) { return b < a; });
+    }
+    else {
+        std::sort(indexList.begin(), indexList.end());
+    }
 }
 
 void AddRemoveSelection::messageBox(const QString &title, QMessageBox::Icon icon) {

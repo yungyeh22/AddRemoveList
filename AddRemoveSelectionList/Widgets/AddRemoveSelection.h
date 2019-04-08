@@ -163,8 +163,8 @@ private:
     // Reset drag & drop action status
     void resetDragDropActionStatus();
 
-    // Reverse sort QModelIndexList
-    void revSortIndexList(QModelIndexList & indexList);
+    // Sort QModelIndexList
+    void sortIndexList(QModelIndexList & indexList, bool rev = false);
 
     // Display warning message
     void messageBox(const QString &title, QMessageBox::Icon icon = QMessageBox::Warning);    
