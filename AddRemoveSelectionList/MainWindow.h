@@ -22,7 +22,7 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
-    void readcsv(QStringList &list, QStringList & tooltip, std::vector<unsigned int> &index);
+    void readcsv(QStringList &list, QStringList & tooltip, std::vector<int> &index);
 };
 
 #endif // MAINWINDOW_H

@@ -15,9 +15,9 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->_addRemoveWidget->setValidNameCheck(true);    
     QStringList list;
     QStringList tooltip;
-    std::vector<unsigned int> index;
+    std::vector<int> index;
     readcsv(list,tooltip,index);
-    ui->_addRemoveWidget->setFullList(list,tooltip,index);
+    ui->_addRemoveWidget->setFullList(list,tooltip,index);    
 }
 
 MainWindow::~MainWindow()
@@ -30,12 +30,12 @@ void MainWindow::on_pushButton_clicked()
     qDebug() << "Something is happening!";
 }
 
-void MainWindow::readcsv(QStringList &list, QStringList &tooltip, std::vector<unsigned int> &index) {
-    QFile fp ("../foodlist.csv");
+void MainWindow::readcsv(QStringList &list, QStringList &tooltip, std::vector<int> &index) {
+    QFile fp ("../numberlist.csv");
     if(fp.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QTextStream textIn(&fp);
         QString lineStr;
-        unsigned int idx = 0;
+        int idx = 0;
         while (textIn.readLineInto(&lineStr)) {
             QStringList strList = lineStr.split(",");
             list << strList.at(0);
