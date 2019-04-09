@@ -161,6 +161,10 @@ private:
     void resetDragDropActionStatus();
 
     // Sort QModelIndexList
+    /* Sorting the selection model list is necessary before processing the items in
+       the model or the index liss because the selection listing order is based on
+       the order of mouse clicks. So if any time selectionModel::selectedIndexes()
+       is called, sort before further processing. */
     void sortIndexList(QModelIndexList & indexList, bool rev = false);
 
     // Display warning message

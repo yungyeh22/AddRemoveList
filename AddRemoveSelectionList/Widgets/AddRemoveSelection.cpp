@@ -301,15 +301,17 @@ QStringList AddRemoveSelection::reducedListByIndex(const QStringList &fList, con
     return reducedList;
 }
 
-void AddRemoveSelection::populateAvailableList() {
-    if (_availableItemModel.rowCount() != 0) {         
-        _availableItemModel.clear(); // Clear model
-    }    
+void AddRemoveSelection::populateAvailableList() { //TODO: reference selectedListIndex when items in selectedListModel exist
+    _availableItemModel.clear(); // Clear model
     QList<QStandardItem*> itemsList;
     for (auto index = 0 ; index < _fullList.size() ; ++index) {
         QString itemText = _fullList.at(index);
         QString itemTooltip = (_tooltipList.empty()) ? "" : _tooltipList.at(index);
+        // For short list
         if (!isFullList() && !_shortListIndex.empty() && !std::binary_search(_shortListIndex.begin(),_shortListIndex.end(),index)) {
+            continue;
+        } // Skip selected items
+        else if (std::find(_selectedListIndex.begin(),_selectedListIndex.end(),index)!=_selectedListIndex.end()) {
             continue;
         }
         itemsList << itemFactory(itemText, itemTooltip);
