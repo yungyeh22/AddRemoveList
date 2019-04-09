@@ -82,8 +82,7 @@ void AddRemoveSelection::setFullListCheckbox(bool checked) {
 void AddRemoveSelection::setFullList (const QStringList &fullList) {    
     _fullList = fullList;
     _tooltipList.clear();
-    _shortListIndex.clear();
-    makeItems();
+    _shortListIndex.clear();    
     populateAvailableList();
 }
 
@@ -93,8 +92,7 @@ void AddRemoveSelection::setFullList(const QStringList &fullList, const QStringL
     if (tooltipList.size() == fullList.size()) {
         _tooltipList = tooltipList;
     }
-    _shortListIndex.clear();
-    makeItems();
+    _shortListIndex.clear();    
     populateAvailableList();
 }
 
@@ -104,8 +102,7 @@ void AddRemoveSelection::setFullList(const QStringList &fullList, const QStringL
     if (tooltipList.size() == fullList.size()) {
         _tooltipList = tooltipList;
     }
-    setShortListIndex(shortListIndex);
-    makeItems();
+    setShortListIndex(shortListIndex);    
     populateAvailableList();
 }
 
@@ -218,13 +215,17 @@ void AddRemoveSelection::on__fullListCheckBox_clicked() {
 
 void AddRemoveSelection::on__addItemButton_clicked() {
     if (ui->_availableListView->selectionModel()->hasSelection()){
-        addItems(ui->_availableListView->selectionModel()->selectedIndexes()); // Must use selectionModel()
+        auto selectionList = ui->_availableListView->selectionModel()->selectedIndexes(); // Must use selectionModel()
+        sortIndexList(selectionList);
+        addItems(selectionList);
     }
 }
 
 void AddRemoveSelection::on__removeItemButton_clicked() {
-    if (ui->_selectedListView->selectionModel()->hasSelection()) {        
-        removeItems(ui->_selectedListView->selectionModel()->selectedIndexes());        
+    if (ui->_selectedListView->selectionModel()->hasSelection()) {
+        auto selectionList = ui->_selectedListView->selectionModel()->selectedIndexes();
+        sortIndexList(selectionList);
+        removeItems(selectionList);
     }
 }
 
@@ -384,19 +385,13 @@ void AddRemoveSelection::updateSelectedListForRemove(const QModelIndexList &sele
     }
 }
 
-void AddRemoveSelection::makeItems() {
-
-}
-
 void AddRemoveSelection::addItems(const QModelIndexList &selections) {    
-    ui->_availableListView->setAutoScroll(false);
-    QModelIndexList leftSelections = selections;
-    // Get the order of index sorted so it can be removed in the correct order.
-    sortIndexList(leftSelections);
-    updateSelectedListForAdd(leftSelections, -1); // Update list
+    ui->_availableListView->setAutoScroll(false);    
+    // Get the order of index sorted so it can be removed in the correct order.    
+    updateSelectedListForAdd(selections, -1); // Update list
     // Prepare items to be added
     int rowNum = _selectedItemModel.rowCount();
-    for (auto index = leftSelections.rbegin() ; index != leftSelections.rend() ; ++index) {
+    for (auto index = selections.rbegin() ; index != selections.rend() ; ++index) {
         _selectedItemModel.insertRow(rowNum, _availableItemModel.takeItem(index->row()));
         _availableItemModel.removeRow(index->row()); // Remove from the highest order
     }
@@ -404,30 +399,27 @@ void AddRemoveSelection::addItems(const QModelIndexList &selections) {
 }
 
 void AddRemoveSelection::removeItems(const QModelIndexList &selections) {
-    ui->_selectedListView->setAutoScroll(false);
-    QModelIndexList rightSelections = selections;
-    // Get the order of index sorted so it can be removed in the correct order.
-    sortIndexList(rightSelections);
+    ui->_selectedListView->setAutoScroll(false);    
+    // Get the order of index sorted so it can be removed in the correct order.    
     // Move items back to the left panel
     std::vector<int> removedList;
-    for (auto index = rightSelections.rbegin() ; index != rightSelections.rend() ; ++index) {
+    for (auto index = selections.rbegin() ; index != selections.rend() ; ++index) {
         int rowIdx = index->row();
         int itemIdx = _selectedListIndex.at(unsigned(rowIdx));
         if (!isFullList() && // If a selected-to-remove item was not exist in the short list and the left panel is showing the short list
                              // we simply remove the item from the selected view.
-            !std::binary_search(_shortListIndex.begin(),_shortListIndex.end(), itemIdx)) {
-            _selectedItemModel.takeItem(rowIdx);
+            !std::binary_search(_shortListIndex.begin(),_shortListIndex.end(), itemIdx)) {            
             _selectedItemModel.removeRow(rowIdx);
         }
         else { // Once we know it needs to be added back to the left panel, we find the next available location (based on its originated order)
-               // in the left panel and insert it.            
-            int rowNum = findNextRowInAvailableList(itemIdx, removedList);
-            _availableItemModel.insertRow(int(rowNum), _selectedItemModel.takeItem(rowIdx));
-            _selectedItemModel.removeRow(rowIdx);
+               // in the left panel and insert it.
             removedList.push_back(itemIdx);
+            int rowNum = findNextRowInAvailableList(itemIdx, removedList);            
+            _availableItemModel.insertRow(int(rowNum), _selectedItemModel.takeItem(rowIdx));
+            _selectedItemModel.removeRow(rowIdx);            
         }
     }
-    updateSelectedListForRemove(rightSelections); // Update list
+    updateSelectedListForRemove(selections); // Update list
     // Move focus item
     ui->_availableListView->selectionModel()->select(ui->_availableListView->indexAt(
                         ui->_availableListView->viewport()->pos()),QItemSelectionModel::Clear);
@@ -441,31 +433,28 @@ int AddRemoveSelection::findNextRowInAvailableList(int itemIdx, const std::vecto
     if (itemIdx == ((isFullList()) ? (_fullList.size()-1) : _shortListIndex.back())) {
         nextRowNum = _availableItemModel.rowCount();
     }
-    // Second, if nothing in the left listview, put the item at the first row.
-    else if (_availableItemModel.rowCount() == 0) {
+    // Second, if nothing in the left listview or it's a definite first item,  put the item at the first row.
+    else if (itemIdx == 0 || _availableItemModel.rowCount() == 0) {
         nextRowNum = 0;
-    }
+    }    
     // Otherwise...
     else {
-        int nextRowIdx = 0;
-        // Search for the position to insert
-        for (int index = 0 ; index < (_fullList.size() - itemIdx) ; ++index) { // (n - itemIdx) becuase that's the max iteration we need to search
-            nextRowIdx = itemIdx + index + 1;
-            if (!isFullList() && // If it's a short list, keep rolling for the next available position
-                !std::binary_search(_shortListIndex.begin(),_shortListIndex.end(),nextRowIdx)) {
-                continue;
-            }
-            else { // For either list type(short/full), the location must not exist in the selectedList.
-                   // We also need to account for the item we just returned. We use a new list (removedList) for that purpose.
-                   // The index can be inserted right before the just-rerurned item.
-                bool foundInSelectedList = std::find(_selectedListIndex.begin(),_selectedListIndex.end(),nextRowIdx) != _selectedListIndex.end();
-                bool foundInRemovedList = std::find(removedList.begin(), removedList.end(), nextRowIdx) != removedList.end();
-                if (!foundInSelectedList || foundInRemovedList) {
-                    break;
-                }
+        if (isFullList()) {
+            nextRowNum = itemIdx; // Starting location in the full list
+        }
+        else {
+            nextRowNum = int(std::distance(_shortListIndex.begin(), // Starting location in the short list
+                        std::find(_shortListIndex.begin(),_shortListIndex.end(),itemIdx)));
+        }
+        int n = nextRowNum;
+        for (int index = 0 ; index < n ; index++) {
+            int nextNum = (isFullList()) ? index :_shortListIndex.at(unsigned(index));
+            bool foundInSelectedList = std::find(_selectedListIndex.begin(),_selectedListIndex.end(),nextNum) != _selectedListIndex.end();
+            bool foundInRemovedList = std::find(removedList.begin(), removedList.end(), nextNum) != removedList.end();
+            if (foundInSelectedList && !foundInRemovedList) {
+                nextRowNum--;
             }
         }
-        nextRowNum = _availableItemModel.indexFromItem(_fullItemsList.at(nextRowIdx)).row();
     }
     return nextRowNum;
 }
@@ -612,11 +601,13 @@ bool AddRemoveSelection::eventFilter(QObject *object, QEvent *event) {
 void AddRemoveSelection::onSelectedListRowsInserted(const QModelIndex &, int first, int last) {
     if (currentDragDropAction()==ActionId::ReorderItems) {
         QModelIndexList selectedList = ui->_selectedListView->selectionModel()->selectedIndexes();
+        sortIndexList(selectedList);
         updateSelectedListAfterReorder(selectedList, first, last);
         resetDragDropActionStatus();
     }
     else if (currentDragDropAction() == ActionId::AddItems) {
         QModelIndexList selectedList = ui->_availableListView->selectionModel()->selectedIndexes();
+        sortIndexList(selectedList);
         updateSelectedListForAdd(selectedList,first);
         resetDragDropActionStatus();
     }

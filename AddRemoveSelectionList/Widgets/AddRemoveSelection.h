@@ -124,9 +124,6 @@ private:
     // Update selected list after item reorder in the selectedList
     void updateSelectedListForRemove(const QModelIndexList &selections);
 
-    // Make items
-    void makeItems();
-
     // Add items to the right listview
     void addItems(const QModelIndexList &selections);
 
