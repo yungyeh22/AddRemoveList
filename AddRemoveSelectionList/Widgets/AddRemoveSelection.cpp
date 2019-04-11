@@ -36,7 +36,7 @@ AddRemoveSelection::AddRemoveSelection(QWidget *parent) :
     // Checkbox
     ui->_fullListCheckBox->setHidden(true);
     ui->_fullListCheckBox->setChecked(true);
-    // Available list view
+    // Available list view    
     ui->_availableListView->setModel(&_availableItemModel);
     ui->_availableListView->setEditTriggers(QAbstractItemView::NoEditTriggers); // Disable edit once for all. Otherwise, set the item flag for each item.
     ui->_availableListView->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -62,7 +62,9 @@ AddRemoveSelection::AddRemoveSelection(QWidget *parent) :
      * for managing the _selectedListIndex.
     */
     connect(&_selectedItemModel,&QStandardItemModel::rowsInserted,this,&AddRemoveSelection::onSelectedListRowsInserted);
-    connect(&_selectedItemModel,&QStandardItemModel::rowsRemoved,this,&AddRemoveSelection::onSelectedListRowsRemoved);
+    connect(&_availableItemModel,&QStandardItemModel::rowsInserted,this,&AddRemoveSelection::onAvailableListRowsInserted);
+    connect(&_availableItemModel,&QStandardItemModel::itemChanged,this,&AddRemoveSelection::onAvailableModelItemChanged);
+
     // Check drap / drop event signals without reimplementing the event functions
     ui->_selectedListView->viewport()->installEventFilter(this);
     ui->_availableListView->viewport()->installEventFilter(this);
@@ -159,14 +161,11 @@ void AddRemoveSelection::loadSelectedItemsFromLists(const QStringList &sList_raw
             // Store index
             _selectedListIndex.push_back(nIndex);
             // Add items
-            QStandardItem* selectedItem = new QStandardItem();
-            selectedItem->setDropEnabled(false);
-            selectedItem->setToolTip(sList_raw.at(idx));
             QString varName = sList_alias.at(idx);
             if (_validNameCheck) {
                 makeUnderscoreVar(varName);
             }
-            selectedItem->setText(varName);
+            QStandardItem* selectedItem = itemFactory(varName,sList_raw.at(idx));
             _selectedItemModel.insertRow(idx, selectedItem);
         }
     }
@@ -404,7 +403,7 @@ void AddRemoveSelection::removeItems(const QModelIndexList &selections) {
     ui->_selectedListView->setAutoScroll(false);    
     // Get the order of index sorted so it can be removed in the correct order.    
     // Move items back to the left panel
-    std::vector<int> removedList;
+    std::vector<int> insertedList;
     for (auto index = selections.rbegin() ; index != selections.rend() ; ++index) {
         int rowIdx = index->row();
         int itemIdx = _selectedListIndex.at(unsigned(rowIdx));
@@ -415,8 +414,8 @@ void AddRemoveSelection::removeItems(const QModelIndexList &selections) {
         }
         else { // Once we know it needs to be added back to the left panel, we find the next available location (based on its originated order)
                // in the left panel and insert it.
-            removedList.push_back(itemIdx);
-            int rowNum = findNextRowInAvailableList(itemIdx, removedList);            
+            insertedList.push_back(itemIdx);
+            int rowNum = findNextRowInAvailableList(itemIdx, insertedList);
             _availableItemModel.insertRow(int(rowNum), _selectedItemModel.takeItem(rowIdx));
             _selectedItemModel.removeRow(rowIdx);            
         }
@@ -428,7 +427,24 @@ void AddRemoveSelection::removeItems(const QModelIndexList &selections) {
     ui->_selectedListView->setAutoScroll(false);
 }
 
-int AddRemoveSelection::findNextRowInAvailableList(int itemIdx, const std::vector<int> &removedList) {
+void AddRemoveSelection::removeItemsWithDragDrop(const QModelIndexList &selections) {
+    std::vector<int> insertedList;
+    std::vector<int> toBeAddedIndexList;
+    int n = selections.count();
+    QList<QStandardItem*> toBeAddedItemsList;
+    for (int index = (_movedItemStartIndex+n-1) ; index >= _movedItemStartIndex ; --index) {
+        toBeAddedItemsList << _availableItemModel.takeItem(index);
+        _availableItemModel.removeRow(index);
+        int rowNum = selections.at(index-_movedItemStartIndex).row();
+        insertedList.push_back(_selectedListIndex.at(unsigned(rowNum)));
+        toBeAddedIndexList.push_back(findNextRowInAvailableList(insertedList.back(),insertedList));
+    }
+    for (int idx = 0 ; idx < n ; ++idx) {
+        _availableItemModel.insertRow(toBeAddedIndexList.at(unsigned(idx)),toBeAddedItemsList.at(idx));
+    }
+}
+
+int AddRemoveSelection::findNextRowInAvailableList(int itemIdx, const std::vector<int> &insertedList) {
     int nextRowNum = -1;
     // To put back the item to the left listview with the original position in the full list
     // First, put to the end if the item is the last in the list
@@ -452,8 +468,8 @@ int AddRemoveSelection::findNextRowInAvailableList(int itemIdx, const std::vecto
         for (int index = 0 ; index < n ; index++) {
             int nextNum = (isFullList()) ? index :_shortListIndex.at(unsigned(index));
             bool foundInSelectedList = std::find(_selectedListIndex.begin(),_selectedListIndex.end(),nextNum) != _selectedListIndex.end();
-            bool foundInRemovedList = std::find(removedList.begin(), removedList.end(), nextNum) != removedList.end();
-            if (foundInSelectedList && !foundInRemovedList) {
+            bool foundInInsertedList = std::find(insertedList.begin(), insertedList.end(), nextNum) != insertedList.end();
+            if (foundInSelectedList && !foundInInsertedList) {
                 nextRowNum--;
             }
         }
@@ -547,9 +563,6 @@ void AddRemoveSelection::messageBox(const QString &title, QMessageBox::Icon icon
 */
 bool AddRemoveSelection::eventFilter(QObject *object, QEvent *event) {
     /* Use for tracking events */
-//        qDebug() << object->objectName();
-//        qDebug() << object->parent()->objectName();
-//        qDebug() << event->type();
     if (object == ui->_availableListView->viewport() && event->type() == QEvent::Drop) {
         _itemsDropInAvailableView = true;
         _itemsDropInSelectedView = false;
@@ -601,7 +614,7 @@ bool AddRemoveSelection::eventFilter(QObject *object, QEvent *event) {
  * using the list from QListView::selectionModel::selectedIndexes() backward.
 */
 void AddRemoveSelection::onSelectedListRowsInserted(const QModelIndex &, int first, int last) {
-    if (currentDragDropAction()==ActionId::ReorderItems) {
+    if (currentDragDropAction() == ActionId::ReorderItems) {
         QModelIndexList selectedList = ui->_selectedListView->selectionModel()->selectedIndexes();
         sortIndexList(selectedList);
         updateSelectedListAfterReorder(selectedList, first, last);
@@ -615,16 +628,10 @@ void AddRemoveSelection::onSelectedListRowsInserted(const QModelIndex &, int fir
     }
 }
 
-/*
- * This might be the final step of drag/drop reorder process. The implementation here is
- * to remove the items which we've previously inserted from _selectedListIndex. The
- * index first here indicates the item indexes that is about to be removed (from first
- *  to last). Becuas we have marked the total number of items about to be removed, we
- * conclude the process when the counter (_numOfMovedItem) reaches 0.
-*/
-void AddRemoveSelection::onSelectedListRowsRemoved(const QModelIndex &, int first, int last) {
-    if (currentDragDropAction()==ActionId::RemoveItems) {
-
+void AddRemoveSelection::onAvailableListRowsInserted(const QModelIndex &, int first, int last) {
+    if (currentDragDropAction() == ActionId::RemoveItems) {
+        _numOfMovedItem = last - first;
+        _movedItemStartIndex = first;
     }
 }
 
@@ -632,6 +639,21 @@ void AddRemoveSelection::onSelectedViewEditEnd(QWidget *, QAbstractItemDelegate:
     // TODO:Have a context menu for resetting the name
     QStandardItem * item = _selectedItemModel.itemFromIndex(ui->_selectedListView->currentIndex());
     checkItemNameError(item);
+}
+
+void AddRemoveSelection::onAvailableModelItemChanged(const QStandardItem *item) {
+    if (currentDragDropAction() == ActionId::RemoveItems) {
+        if (_numOfMovedItem > 0) { // Counting down. Wait for item data added.
+            _numOfMovedItem--;
+        }
+        else {
+            QModelIndexList selectedList = ui->_selectedListView->selectionModel()->selectedIndexes();
+            sortIndexList(selectedList);
+            removeItemsWithDragDrop(selectedList);
+            updateSelectedListForRemove(selectedList);
+            resetDragDropActionStatus();
+        }
+    }
 }
 
 }

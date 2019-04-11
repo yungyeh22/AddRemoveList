@@ -99,11 +99,10 @@ private slots:
     void on__availableListView_doubleClicked(const QModelIndex &index);
     void on__loadListButton_clicked();
     void on__saveListButton_clicked();
-//    void onAvailableListRowsInserted(const QModelIndex &, int first, int last);
-//    void onAvailableListRowsRemoved(const QModelIndex &, int first, int last);
-    void onSelectedListRowsInserted(const QModelIndex &, int first, int last);
-    void onSelectedListRowsRemoved(const QModelIndex &, int first, int last);
+    void onAvailableListRowsInserted(const QModelIndex &, int first, int last);
+    void onSelectedListRowsInserted(const QModelIndex &, int first, int last);    
     void onSelectedViewEditEnd(QWidget *, QAbstractItemDelegate::EndEditHint);
+    void onAvailableModelItemChanged(const QStandardItem *item);
 
 private:
     // Return true if it's currently showing the full list
@@ -129,6 +128,9 @@ private:
 
     // Remove items from the right listview. Put back to left listview
     void removeItems(const QModelIndexList &selections);
+
+    // Remove items with drag & drop
+    void removeItemsWithDragDrop(const QModelIndexList &selections);
 
     // Set the selected items to be Pre-populated in the selected view
     void loadSelectedItemsFromLists(const QStringList &sList_raw, const QStringList &sList_alias);
@@ -173,8 +175,7 @@ private:
 private: // Vars
     Ui::AddRemoveSelection *ui;
     QStandardItemModel _availableItemModel;
-    QStandardItemModel _selectedItemModel;
-    QList<QStandardItem*> _fullItemsList;
+    QStandardItemModel _selectedItemModel;    
     QStringList _fullList;
     QStringList _tooltipList;    
     std::vector<int> _selectedListIndex;
@@ -185,10 +186,12 @@ private: // Vars
     bool _itemsDropInAvailableView = false;
     bool _itemsSelectedInAvailableView = false;
     bool _itemsSelectedInSelectedView = false;
-    int _numOfMovedItem;
+    int _numOfMovedItem = 0;
+    int _movedItemStartIndex = 0;
 
 protected:
     bool eventFilter(QObject *object, QEvent *event) override;
+
 };
 
 }
