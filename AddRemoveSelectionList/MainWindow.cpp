@@ -27,6 +27,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_pushButton_clicked()
 {
+    qDebug() << ui->_addRemoveWidget->getSelectedItemsList();
     qDebug() << "Something is happening!";
 }
 
