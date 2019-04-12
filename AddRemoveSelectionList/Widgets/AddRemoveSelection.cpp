@@ -433,11 +433,18 @@ void AddRemoveSelection::removeItemsWithDragDrop(const QModelIndexList &selectio
     int n = selections.count();
     QList<QStandardItem*> toBeAddedItemsList;
     for (int index = (_movedItemStartIndex+n-1) ; index >= _movedItemStartIndex ; --index) {
-        toBeAddedItemsList << _availableItemModel.takeItem(index);
-        _availableItemModel.removeRow(index);
         int rowNum = selections.at(index-_movedItemStartIndex).row();
-        insertedList.push_back(_selectedListIndex.at(unsigned(rowNum)));
-        toBeAddedIndexList.push_back(findNextRowInAvailableList(insertedList.back(),insertedList));
+        int indexNum = _selectedListIndex.at(unsigned(rowNum));
+        if (!isFullList() &&
+                !std::binary_search(_shortListIndex.begin(),_shortListIndex.end(),indexNum)) {
+            n--;
+        }
+        else {
+            toBeAddedItemsList << _availableItemModel.takeItem(index);
+            insertedList.push_back(indexNum);
+            toBeAddedIndexList.push_back(findNextRowInAvailableList(indexNum,insertedList));
+        }
+        _availableItemModel.removeRow(index);
     }
     for (int idx = 0 ; idx < n ; ++idx) {
         _availableItemModel.insertRow(toBeAddedIndexList.at(unsigned(idx)),toBeAddedItemsList.at(idx));
