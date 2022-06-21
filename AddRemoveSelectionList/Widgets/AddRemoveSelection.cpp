@@ -155,6 +155,7 @@ void AddRemoveSelection::loadSelectedItemsFromLists(const QStringList &sList_raw
     _selectedListIndex.clear();
     _selectedItemModel.clear();
     // Arrange selected items
+    int nextIndex = 0;
     for (int idx = 0 ; idx < sList_raw.size() ; ++idx) {
         int nIndex = _fullList.indexOf(sList_raw.at(idx));
         if (nIndex != -1) {
@@ -166,7 +167,8 @@ void AddRemoveSelection::loadSelectedItemsFromLists(const QStringList &sList_raw
                 makeUnderscoreVar(varName);
             }
             QStandardItem* selectedItem = itemFactory(varName,sList_raw.at(idx));
-            _selectedItemModel.insertRow(idx, selectedItem);
+            _selectedItemModel.insertRow(nextIndex, selectedItem);
+            nextIndex++;
         }
     }
     populateAvailableList();
@@ -648,7 +650,7 @@ void AddRemoveSelection::onSelectedViewEditEnd(QWidget *, QAbstractItemDelegate:
     checkItemNameError(item);
 }
 
-void AddRemoveSelection::onAvailableModelItemChanged(const QStandardItem *item) {
+void AddRemoveSelection::onAvailableModelItemChanged(const QStandardItem *) {
     if (currentDragDropAction() == ActionId::RemoveItems) {
         if (_numOfMovedItem > 0) { // Counting down. Wait for item data added.
             _numOfMovedItem--;
